@@ -1,0 +1,212 @@
+{
+  "name": "WF-INGEST-GMAIL",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "readStatus": "unread",
+          "receivedAfter": "={{ $now.minus(1, 'hour').toISO() }}"
+        },
+        "options": {
+          "downloadAttachments": true
+        }
+      },
+      "id": "gmail-trigger",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-credentials",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "not-noreply",
+              "leftValue": "={{ $json.from.email }}",
+              "rightValue": "noreply",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "id": "not-automated",
+              "leftValue": "={{ $json.from.email }}",
+              "rightValue": "mailer-daemon",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-auto",
+      "name": "Filter Automated Emails",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Normalize Gmail message to standard format\nconst email = $input.item.json;\n\n// Extract clean text from email body\nlet messageText = email.text || email.snippet || '';\n\n// Clean up email text (remove excessive whitespace, signatures, etc.)\nmessageText = messageText\n  .replace(/\\r\\n/g, '\\n')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\n// Extract sender info\nconst fromEmail = email.from?.email || email.from || '';\nconst fromName = email.from?.name || fromEmail.split('@')[0] || 'Unknown';\n\n// Generate conversation ID from thread\nconst threadId = email.threadId || email.id;\n\nconst normalized = {\n  source: 'gmail',\n  platform: 'email',\n  conversation_id: `gmail_${threadId}`,\n  sender_id: fromEmail,\n  sender_name: fromName,\n  message: messageText,\n  message_id: email.id || `gmail_${Date.now()}`,\n  timestamp: email.date ? new Date(email.date).toISOString() : new Date().toISOString(),\n  is_echo: false,\n  attachments: (email.attachments || []).map(att => ({\n    type: att.mimeType || 'unknown',\n    filename: att.filename,\n    size: att.size\n  })),\n  metadata: {\n    subject: email.subject || '(No Subject)',\n    thread_id: threadId,\n    labels: email.labelIds || [],\n    to: email.to,\n    cc: email.cc,\n    bcc: email.bcc,\n    reply_to: email.replyTo,\n    has_attachments: (email.attachments || []).length > 0\n  }\n};\n\nreturn { json: normalized };"
+      },
+      "id": "normalize-gmail",
+      "name": "Normalize Gmail Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-message",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-empty",
+      "name": "Skip Empty Messages",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ $env.WF_CORE_BRAIN_ID }}",
+        "options": {}
+      },
+      "id": "call-brain",
+      "name": "Call Brain",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "messageId": "={{ $('Gmail Trigger').item.json.id }}",
+        "labelIds": ["INBOX"],
+        "options": {}
+      },
+      "id": "mark-read",
+      "name": "Mark as Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1340, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-credentials",
+          "name": "Gmail OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Filter Automated Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Automated Emails": {
+      "main": [
+        [
+          {
+            "node": "Normalize Gmail Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Gmail Data": {
+      "main": [
+        [
+          {
+            "node": "Skip Empty Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Empty Messages": {
+      "main": [
+        [
+          {
+            "node": "Call Brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Brain": {
+      "main": [
+        [
+          {
+            "node": "Mark as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "ingestion"
+    },
+    {
+      "name": "gmail"
+    }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}

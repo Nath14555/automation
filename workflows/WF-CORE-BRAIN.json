@@ -1,0 +1,514 @@
+{
+  "name": "WF-CORE-BRAIN",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "conversations",
+        "filterType": "string",
+        "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+        "options": {
+          "returnCount": "exactCount"
+        }
+      },
+      "id": "check-duplicate",
+      "name": "Check Duplicate",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Anti-duplicate check\nconst input = $input.item.json;\nconst existingConversation = $('Check Duplicate').item.json;\n\n// Check if this exact message was already processed\nconst messageId = $('Execute Workflow Trigger').item.json.message_id;\nconst lastMessageId = existingConversation?.last_message_id;\n\nconst isDuplicate = lastMessageId === messageId;\n\n// Get current stage from existing conversation or default to 'new'\nconst currentStage = existingConversation?.stage || 'new';\nconst conversationHistory = existingConversation?.history || [];\n\nreturn {\n  json: {\n    ...$('Execute Workflow Trigger').item.json,\n    is_duplicate: isDuplicate,\n    current_stage: currentStage,\n    conversation_exists: !!existingConversation?.conversation_id,\n    conversation_history: conversationHistory,\n    message_count: existingConversation?.message_count || 0\n  }\n};"
+      },
+      "id": "process-duplicate",
+      "name": "Process Duplicate Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "not-duplicate",
+              "leftValue": "={{ $json.is_duplicate }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-duplicate",
+      "name": "Skip Duplicates",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un assistant intelligent qui analyse les messages entrants pour determiner l'intention de l'utilisateur.\n\nAnalyse le message et retourne un JSON avec:\n- intent: greeting|question|booking|complaint|thanks|other\n- confidence: 0.0 a 1.0\n- entities: liste des entites detectees (dates, noms, etc.)\n- sentiment: positive|neutral|negative\n- requires_booking: true si le message indique une intention de reserver\n- requires_human: true si le message necessite une intervention humaine\n\nReponds UNIQUEMENT avec le JSON, sans texte supplementaire."
+            },
+            {
+              "role": "user",
+              "content": "=Message: {{ $json.message }}\n\nHistorique recent: {{ JSON.stringify($json.conversation_history.slice(-3)) }}\n\nStage actuel: {{ $json.current_stage }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "detect-intent",
+      "name": "Detect Intent (OpenAI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1120, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse intent response and apply guardrails\nconst input = $input.item.json;\nconst intentResponse = $('Detect Intent (OpenAI)').item.json.message.content;\n\nlet intent;\ntry {\n  intent = JSON.parse(intentResponse);\n} catch (e) {\n  intent = {\n    intent: 'other',\n    confidence: 0.5,\n    entities: [],\n    sentiment: 'neutral',\n    requires_booking: false,\n    requires_human: false\n  };\n}\n\n// Guardrails - Check for sensitive content\nconst message = input.message.toLowerCase();\nconst sensitiveKeywords = ['suicide', 'urgence', 'danger', 'menace', 'avocat', 'police', 'juridique'];\nconst containsSensitive = sensitiveKeywords.some(kw => message.includes(kw));\n\n// Force handoff for sensitive content\nif (containsSensitive) {\n  intent.requires_human = true;\n  intent.handoff_reason = 'sensitive_content';\n}\n\n// Guardrails - Max message count before handoff\nconst MAX_AUTO_MESSAGES = 10;\nif (input.message_count >= MAX_AUTO_MESSAGES && !intent.requires_booking) {\n  intent.requires_human = true;\n  intent.handoff_reason = 'max_messages_reached';\n}\n\n// Guardrails - Negative sentiment threshold\nif (intent.sentiment === 'negative' && intent.confidence > 0.8) {\n  intent.requires_human = true;\n  intent.handoff_reason = 'negative_sentiment';\n}\n\nreturn {\n  json: {\n    ...input,\n    intent: intent.intent,\n    intent_confidence: intent.confidence,\n    entities: intent.entities,\n    sentiment: intent.sentiment,\n    requires_booking: intent.requires_booking,\n    requires_human: intent.requires_human,\n    handoff_reason: intent.handoff_reason || null\n  }\n};"
+      },
+      "id": "apply-guardrails",
+      "name": "Apply Guardrails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Determine new stage based on intent and current stage\nconst input = $input.item.json;\n\nconst stageTransitions = {\n  'new': {\n    'greeting': 'new',\n    'question': 'qualified',\n    'booking': 'booking',\n    'complaint': 'qualified',\n    'thanks': 'new',\n    'other': 'new'\n  },\n  'qualified': {\n    'greeting': 'qualified',\n    'question': 'qualified',\n    'booking': 'booking',\n    'complaint': 'qualified',\n    'thanks': 'qualified',\n    'other': 'qualified'\n  },\n  'booking': {\n    'greeting': 'booking',\n    'question': 'booking',\n    'booking': 'booking',\n    'complaint': 'booking',\n    'thanks': 'closed',\n    'other': 'booking'\n  },\n  'closed': {\n    'greeting': 'new',\n    'question': 'qualified',\n    'booking': 'booking',\n    'complaint': 'qualified',\n    'thanks': 'closed',\n    'other': 'closed'\n  }\n};\n\nconst currentStage = input.current_stage || 'new';\nconst intent = input.intent || 'other';\nconst newStage = stageTransitions[currentStage]?.[intent] || currentStage;\n\nreturn {\n  json: {\n    ...input,\n    new_stage: newStage,\n    stage_changed: newStage !== currentStage\n  }\n};"
+      },
+      "id": "update-stage",
+      "name": "Update Stage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requires_human }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "handoff"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requires_booking }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "booking"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requires_human }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.requires_booking }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "auto_reply"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-action",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un assistant conversationnel amical et professionnel. Tu representes une entreprise et dois repondre aux messages de maniere naturelle et engageante.\n\nRegles:\n- Sois concis mais chaleureux\n- Adapte ton ton au canal (plus decontracte sur Instagram/TikTok, plus formel par email)\n- Ne fais jamais de promesses que tu ne peux pas tenir\n- Encourage subtilement la prise de rendez-vous quand c'est pertinent\n- Reponds en francais\n\nRetourne UNIQUEMENT le texte de la reponse, sans guillemets ni formatage supplementaire."
+            },
+            {
+              "role": "user",
+              "content": "=Canal: {{ $json.source }} ({{ $json.platform }})\nMessage client: {{ $json.message }}\nIntent detecte: {{ $json.intent }}\nStage: {{ $json.new_stage }}\nHistorique: {{ JSON.stringify($json.conversation_history.slice(-3)) }}\n\nGenere une reponse appropriee:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "generate-reply",
+      "name": "Generate Reply (OpenAI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [2000, 400],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Prepare handoff response\nconst input = $input.item.json;\n\nconst handoffMessage = `Merci pour votre message. Un membre de notre equipe va prendre le relais et vous repondra dans les plus brefs delais.`;\n\nreturn {\n  json: {\n    reply_text: handoffMessage,\n    action: 'handoff',\n    handoff: true,\n    handoff_reason: input.handoff_reason,\n    stage: input.new_stage,\n    intent: input.intent,\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id\n  }\n};"
+      },
+      "id": "prepare-handoff",
+      "name": "Prepare Handoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Prepare booking response\nconst input = $input.item.json;\n\nconst bookingMessage = `Super ! Je serais ravi de vous aider a reserver. Pour finaliser votre rendez-vous, j'aurais besoin de quelques informations.`;\n\nreturn {\n  json: {\n    reply_text: bookingMessage,\n    action: 'book',\n    handoff: false,\n    stage: 'booking',\n    intent: input.intent,\n    entities: input.entities,\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id\n  }\n};"
+      },
+      "id": "prepare-booking",
+      "name": "Prepare Booking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Prepare auto-reply response\nconst input = $input.item.json;\nconst replyText = $('Generate Reply (OpenAI)').item.json.message.content;\n\n// Choose variant based on time and randomness for human-like feel\nconst variants = [\n  replyText,\n  replyText.replace(/!/g, '.'),\n  replyText + ' 😊'.replace(/😊/g, '') // Remove emoji by default\n];\n\n// Simple variant selection (first one for consistency)\nconst selectedReply = variants[0];\n\nreturn {\n  json: {\n    reply_text: selectedReply,\n    action: 'send',\n    handoff: false,\n    stage: input.new_stage,\n    intent: input.intent,\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id\n  }\n};"
+      },
+      "id": "prepare-reply",
+      "name": "Prepare Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 400]
+    },
+    {
+      "parameters": {},
+      "id": "merge-outputs",
+      "name": "Merge Outputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "tableId": "conversations",
+        "filterType": "string",
+        "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+        "dataToSend": "autoMapInputData",
+        "options": {}
+      },
+      "id": "save-state",
+      "name": "Save Conversation State",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2660, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "output",
+              "name": "output",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "return-output",
+      "name": "Return Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2880, 300]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Process Duplicate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Duplicate Check": {
+      "main": [
+        [
+          {
+            "node": "Skip Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Detect Intent (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Intent (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Apply Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Update Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Stage": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Prepare Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Booking",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Reply (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Handoff": {
+      "main": [
+        [
+          {
+            "node": "Merge Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Booking": {
+      "main": [
+        [
+          {
+            "node": "Merge Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Reply (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reply": {
+      "main": [
+        [
+          {
+            "node": "Merge Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Outputs": {
+      "main": [
+        [
+          {
+            "node": "Save Conversation State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Conversation State": {
+      "main": [
+        [
+          {
+            "node": "Return Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "core"
+    },
+    {
+      "name": "brain"
+    }
+  ],
+  "triggerCount": 0,
+  "pinData": {}
+}

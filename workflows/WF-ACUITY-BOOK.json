@@ -1,0 +1,435 @@
+{
+  "name": "WF-ACUITY-BOOK",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Check if we have all required info for booking\nconst input = $input.item.json;\nconst entities = input.entities || [];\n\n// Required fields for booking\nconst requiredFields = {\n  name: null,\n  email: null,\n  phone: null,\n  date: null,\n  time: null,\n  service: null\n};\n\n// Extract entities\nfor (const entity of entities) {\n  if (entity.type === 'name' || entity.label === 'name') {\n    requiredFields.name = entity.value;\n  }\n  if (entity.type === 'email' || entity.label === 'email') {\n    requiredFields.email = entity.value;\n  }\n  if (entity.type === 'phone' || entity.label === 'phone') {\n    requiredFields.phone = entity.value;\n  }\n  if (entity.type === 'date' || entity.label === 'date') {\n    requiredFields.date = entity.value;\n  }\n  if (entity.type === 'time' || entity.label === 'time') {\n    requiredFields.time = entity.value;\n  }\n  if (entity.type === 'service' || entity.label === 'service') {\n    requiredFields.service = entity.value;\n  }\n}\n\n// Try to get name from sender if not in entities\nif (!requiredFields.name && input.sender_name && input.sender_name !== 'Unknown') {\n  requiredFields.name = input.sender_name;\n}\n\n// Check completeness\nconst missingFields = Object.entries(requiredFields)\n  .filter(([key, value]) => !value)\n  .map(([key]) => key);\n\nconst isComplete = missingFields.length === 0;\nconst hasMinimumInfo = requiredFields.name && (requiredFields.email || requiredFields.phone);\n\nreturn {\n  json: {\n    ...input,\n    booking_info: requiredFields,\n    missing_fields: missingFields,\n    is_complete: isComplete,\n    has_minimum_info: hasMinimumInfo\n  }\n};"
+      },
+      "id": "check-info",
+      "name": "Check Booking Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.is_complete }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "complete"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.has_minimum_info }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.is_complete }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "partial"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.has_minimum_info }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "missing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-completeness",
+      "name": "Route by Completeness",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://acuityscheduling.com/api/v1/appointments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"datetime\": \"{{ $json.booking_info.date }}T{{ $json.booking_info.time }}\",\n  \"appointmentTypeID\": {{ $env.ACUITY_APPOINTMENT_TYPE_ID || 1 }},\n  \"firstName\": \"{{ $json.booking_info.name.split(' ')[0] }}\",\n  \"lastName\": \"{{ $json.booking_info.name.split(' ').slice(1).join(' ') || '' }}\",\n  \"email\": \"{{ $json.booking_info.email }}\",\n  \"phone\": \"{{ $json.booking_info.phone }}\",\n  \"notes\": \"Booked via automation from {{ $json.source }}\"\n}",
+        "options": {}
+      },
+      "id": "create-booking",
+      "name": "Create Acuity Booking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "acuity-credentials",
+          "name": "Acuity API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Generate booking link for partial info\nconst input = $input.item.json;\nconst bookingInfo = input.booking_info;\n\n// Build Acuity scheduling link with prefilled info\nconst baseUrl = process.env.ACUITY_SCHEDULING_URL || 'https://app.acuityscheduling.com/schedule.php';\nconst params = new URLSearchParams();\n\nif (bookingInfo.name) {\n  const nameParts = bookingInfo.name.split(' ');\n  params.append('firstName', nameParts[0]);\n  if (nameParts.length > 1) {\n    params.append('lastName', nameParts.slice(1).join(' '));\n  }\n}\nif (bookingInfo.email) {\n  params.append('email', bookingInfo.email);\n}\nif (bookingInfo.phone) {\n  params.append('phone', bookingInfo.phone);\n}\n\nconst bookingLink = `${baseUrl}?${params.toString()}`;\n\n// Generate message asking for missing info\nconst missingFieldsMessages = {\n  'date': 'la date souhaitee',\n  'time': \"l'heure preferee\",\n  'service': 'le type de service',\n  'email': 'votre adresse email',\n  'phone': 'votre numero de telephone'\n};\n\nconst missingList = input.missing_fields\n  .filter(f => missingFieldsMessages[f])\n  .map(f => missingFieldsMessages[f]);\n\nlet responseText = '';\nif (missingList.length > 0) {\n  responseText = `Pour finaliser votre reservation, j'aurais besoin de ${missingList.join(', ')}. Vous pouvez aussi reserver directement via ce lien: ${bookingLink}`;\n} else {\n  responseText = `Voici le lien pour finaliser votre reservation: ${bookingLink}`;\n}\n\nreturn {\n  json: {\n    ...input,\n    booking_link: bookingLink,\n    reply_text: responseText,\n    action: 'send_link',\n    booking_status: 'link_sent'\n  }\n};"
+      },
+      "id": "generate-link",
+      "name": "Generate Booking Link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Generate message for missing info\nconst input = $input.item.json;\n\nconst responseText = `Pour reserver un rendez-vous, j'aurais besoin de quelques informations: votre nom, email ou telephone, ainsi que vos preferences de date et heure. Pouvez-vous me les communiquer ?`;\n\nreturn {\n  json: {\n    ...input,\n    reply_text: responseText,\n    action: 'request_info',\n    booking_status: 'awaiting_info'\n  }\n};"
+      },
+      "id": "request-info",
+      "name": "Request Missing Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Process successful booking\nconst input = $input.item.json;\nconst bookingResult = $('Create Acuity Booking').item.json;\n\nconst confirmationId = bookingResult.id || bookingResult.confirmationNumber || 'N/A';\nconst datetime = bookingResult.datetime || `${input.booking_info.date} ${input.booking_info.time}`;\n\nconst responseText = `Votre rendez-vous est confirme pour le ${datetime}. Numero de confirmation: ${confirmationId}. A bientot !`;\n\nreturn {\n  json: {\n    ...input,\n    booking_id: confirmationId,\n    booking_datetime: datetime,\n    reply_text: responseText,\n    action: 'booking_confirmed',\n    booking_status: 'confirmed'\n  }\n};"
+      },
+      "id": "confirm-booking",
+      "name": "Confirm Booking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {},
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "booking_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "conversation_id",
+              "fieldValue": "={{ $json.conversation_id }}"
+            },
+            {
+              "fieldName": "sender_id",
+              "fieldValue": "={{ $json.sender_id }}"
+            },
+            {
+              "fieldName": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldName": "booking_status",
+              "fieldValue": "={{ $json.booking_status }}"
+            },
+            {
+              "fieldName": "booking_id",
+              "fieldValue": "={{ $json.booking_id || null }}"
+            },
+            {
+              "fieldName": "booking_datetime",
+              "fieldValue": "={{ $json.booking_datetime || null }}"
+            },
+            {
+              "fieldName": "booking_info",
+              "fieldValue": "={{ JSON.stringify($json.booking_info) }}"
+            },
+            {
+              "fieldName": "missing_fields",
+              "fieldValue": "={{ JSON.stringify($json.missing_fields) }}"
+            },
+            {
+              "fieldName": "created_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-booking",
+      "name": "Log Booking Attempt",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "conversations",
+        "filterType": "string",
+        "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "stage",
+              "fieldValue": "={{ $json.booking_status === 'confirmed' ? 'closed' : 'booking' }}"
+            },
+            {
+              "fieldName": "booking_status",
+              "fieldValue": "={{ $json.booking_status }}"
+            },
+            {
+              "fieldName": "booking_id",
+              "fieldValue": "={{ $json.booking_id || null }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-conversation",
+      "name": "Update Conversation",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1780, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "output",
+              "name": "output",
+              "value": "={{ { reply_text: $json.reply_text, action: $json.action, booking_status: $json.booking_status, booking_id: $json.booking_id, booking_link: $json.booking_link } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "return-output",
+      "name": "Return Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check Booking Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Booking Info": {
+      "main": [
+        [
+          {
+            "node": "Route by Completeness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Completeness": {
+      "main": [
+        [
+          {
+            "node": "Create Acuity Booking",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Booking Link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Request Missing Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Acuity Booking": {
+      "main": [
+        [
+          {
+            "node": "Confirm Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Booking": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Booking Link": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Missing Info": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Log Booking Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Booking Attempt": {
+      "main": [
+        [
+          {
+            "node": "Update Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conversation": {
+      "main": [
+        [
+          {
+            "node": "Return Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "actions"
+    },
+    {
+      "name": "booking"
+    },
+    {
+      "name": "acuity"
+    }
+  ],
+  "triggerCount": 0,
+  "pinData": {}
+}

@@ -1,0 +1,190 @@
+{
+  "name": "WF-INGEST-TIKTOK",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/tiktok",
+        "options": {}
+      },
+      "id": "webhook-tiktok",
+      "name": "Webhook TikTok",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "tiktok-ingestion"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "verify-event",
+              "leftValue": "={{ $json.event }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-valid",
+      "name": "Filter Valid Events",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Normalize TikTok webhook payload to standard format\nconst data = $input.item.json;\n\n// TikTok Business API / Inbox message structure\nconst event = data.event;\nconst content = data.content || data.message || {};\nconst user = data.user || data.sender || {};\n\nif (!event) {\n  return { json: { error: 'Invalid event structure', skip: true } };\n}\n\n// Handle different TikTok event types\nlet messageText = '';\nlet messageType = 'text';\n\nif (content.text) {\n  messageText = content.text;\n} else if (content.media_url) {\n  messageText = '[Media]';\n  messageType = 'media';\n} else if (content.share_info) {\n  messageText = '[Shared Content]';\n  messageType = 'share';\n}\n\nconst normalized = {\n  source: 'tiktok',\n  platform: 'tiktok',\n  conversation_id: `tiktok_${user.open_id || user.user_id}_${data.conversation_id || Date.now()}`,\n  sender_id: user.open_id || user.user_id || 'unknown',\n  sender_name: user.display_name || user.nickname || 'TikTok User',\n  message: messageText,\n  message_id: data.message_id || data.msg_id || `tiktok_${Date.now()}`,\n  message_type: messageType,\n  timestamp: data.create_time ? new Date(data.create_time * 1000).toISOString() : new Date().toISOString(),\n  is_echo: false,\n  attachments: content.media_url ? [{ type: 'media', url: content.media_url }] : [],\n  metadata: {\n    event_type: event,\n    conversation_id: data.conversation_id,\n    avatar_url: user.avatar_url,\n    follower_count: user.follower_count,\n    video_id: content.video_id || null,\n    share_info: content.share_info || null\n  }\n};\n\nreturn { json: normalized };"
+      },
+      "id": "normalize-tiktok",
+      "name": "Normalize TikTok Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-message",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "not-skip",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-empty",
+      "name": "Skip Empty Messages",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ $env.WF_CORE_BRAIN_ID }}",
+        "options": {}
+      },
+      "id": "call-brain",
+      "name": "Call Brain",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'received', message_id: $json.message_id }) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook TikTok": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Events": {
+      "main": [
+        [
+          {
+            "node": "Normalize TikTok Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize TikTok Data": {
+      "main": [
+        [
+          {
+            "node": "Skip Empty Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Empty Messages": {
+      "main": [
+        [
+          {
+            "node": "Call Brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Brain": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "ingestion"
+    },
+    {
+      "name": "tiktok"
+    }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}

@@ -1,0 +1,190 @@
+{
+  "name": "WF-INGEST-META",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/meta",
+        "options": {}
+      },
+      "id": "webhook-meta",
+      "name": "Webhook Meta",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "meta-ingestion"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "verify-meta",
+              "leftValue": "={{ $json.object }}",
+              "rightValue": "page",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-valid",
+      "name": "Filter Valid Messages",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Normalize Meta webhook payload to standard format\nconst entry = $input.item.json.entry?.[0];\nconst messaging = entry?.messaging?.[0];\nconst message = messaging?.message;\nconst sender = messaging?.sender;\n\nif (!message || !sender) {\n  return { json: { error: 'Invalid message structure', skip: true } };\n}\n\n// Determine if it's from Instagram or Facebook\nconst isInstagram = entry?.id?.startsWith('17') || $input.item.json.object === 'instagram';\nconst platform = isInstagram ? 'instagram' : 'facebook';\n\nconst normalized = {\n  source: 'meta',\n  platform: platform,\n  conversation_id: `meta_${sender.id}_${entry?.id}`,\n  sender_id: sender.id,\n  sender_name: messaging?.sender?.name || 'Unknown',\n  message: message.text || '',\n  message_id: message.mid,\n  timestamp: new Date(messaging.timestamp).toISOString(),\n  is_echo: message.is_echo || false,\n  attachments: message.attachments || [],\n  metadata: {\n    page_id: entry?.id,\n    recipient_id: messaging?.recipient?.id,\n    nlp: message.nlp || null,\n    reply_to: message.reply_to || null\n  }\n};\n\nreturn { json: normalized };"
+      },
+      "id": "normalize-meta",
+      "name": "Normalize Meta Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip-echo",
+              "leftValue": "={{ $json.is_echo }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "has-message",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-echo",
+      "name": "Skip Echo Messages",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ $env.WF_CORE_BRAIN_ID }}",
+        "options": {}
+      },
+      "id": "call-brain",
+      "name": "Call Brain",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'received', message_id: $json.message_id }) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Meta": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Messages": {
+      "main": [
+        [
+          {
+            "node": "Normalize Meta Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Meta Data": {
+      "main": [
+        [
+          {
+            "node": "Skip Echo Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Echo Messages": {
+      "main": [
+        [
+          {
+            "node": "Call Brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Brain": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "ingestion"
+    },
+    {
+      "name": "meta"
+    }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}

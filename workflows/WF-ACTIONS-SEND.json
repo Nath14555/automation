@@ -1,0 +1,448 @@
+{
+  "name": "WF-ACTIONS-SEND",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Calculate human-like delay based on message length and time of day\nconst input = $input.item.json;\nconst replyText = input.reply_text || '';\n\n// Base delay: 2-5 seconds\nconst baseDelay = Math.floor(Math.random() * 3000) + 2000;\n\n// Add delay based on message length (simulates typing)\n// Roughly 50ms per character, capped at 10 seconds\nconst typingDelay = Math.min(replyText.length * 50, 10000);\n\n// Add random variation (0-2 seconds)\nconst randomVariation = Math.floor(Math.random() * 2000);\n\n// Total delay in milliseconds\nconst totalDelay = baseDelay + typingDelay + randomVariation;\n\n// Convert to seconds for Wait node\nconst delaySeconds = Math.ceil(totalDelay / 1000);\n\nreturn {\n  json: {\n    ...input,\n    delay_ms: totalDelay,\n    delay_seconds: delaySeconds\n  }\n};"
+      },
+      "id": "calculate-delay",
+      "name": "Calculate Human Delay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delay_seconds }}",
+        "unit": "seconds"
+      },
+      "id": "wait-human",
+      "name": "Wait (Human Style)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.source }}",
+                    "rightValue": "meta",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "meta"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.source }}",
+                    "rightValue": "tiktok",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tiktok"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.source }}",
+                    "rightValue": "gmail",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "gmail"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-channel",
+      "name": "Route to Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v18.0/{{ $json.metadata.page_id }}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"recipient\": {\n    \"id\": \"{{ $json.sender_id }}\"\n  },\n  \"messaging_type\": \"RESPONSE\",\n  \"message\": {\n    \"text\": {{ JSON.stringify($json.reply_text) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "send-meta",
+      "name": "Send Meta Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "meta-credentials",
+          "name": "Meta Graph API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://open.tiktokapis.com/v2/message/send/",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"conversation_id\": \"{{ $json.metadata.conversation_id }}\",\n  \"content\": {\n    \"text\": {{ JSON.stringify($json.reply_text) }}\n  }\n}",
+        "options": {}
+      },
+      "id": "send-tiktok",
+      "name": "Send TikTok Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "tiktok-credentials",
+          "name": "TikTok API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.sender_id }}",
+        "subject": "=Re: {{ $json.metadata.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.reply_text }}",
+        "options": {
+          "replyTo": "={{ $json.sender_id }}",
+          "appendAttribution": false
+        }
+      },
+      "id": "send-gmail",
+      "name": "Send Gmail Reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1120, 400],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-credentials",
+          "name": "Gmail OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "merge-channels",
+      "name": "Merge Channel Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "message_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "conversation_id",
+              "fieldValue": "={{ $json.conversation_id }}"
+            },
+            {
+              "fieldName": "message_id",
+              "fieldValue": "={{ $json.message_id }}"
+            },
+            {
+              "fieldName": "direction",
+              "fieldValue": "outbound"
+            },
+            {
+              "fieldName": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldName": "content",
+              "fieldValue": "={{ $json.reply_text }}"
+            },
+            {
+              "fieldName": "stage",
+              "fieldValue": "={{ $json.stage }}"
+            },
+            {
+              "fieldName": "intent",
+              "fieldValue": "={{ $json.intent }}"
+            },
+            {
+              "fieldName": "sent_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldName": "delay_applied_ms",
+              "fieldValue": "={{ $json.delay_ms }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-message",
+      "name": "Log Sent Message",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "conversations",
+        "filterType": "string",
+        "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "stage",
+              "fieldValue": "={{ $json.stage }}"
+            },
+            {
+              "fieldName": "last_reply_at",
+              "fieldValue": "={{ $now.toISO() }}"
+            },
+            {
+              "fieldName": "last_message_id",
+              "fieldValue": "={{ $json.message_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-stage",
+      "name": "Update Conversation Stage",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1780, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "result",
+              "name": "result",
+              "value": "={{ { success: true, conversation_id: $json.conversation_id, channel: $json.source, stage: $json.stage } }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "return-result",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Calculate Human Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Human Delay": {
+      "main": [
+        [
+          {
+            "node": "Wait (Human Style)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait (Human Style)": {
+      "main": [
+        [
+          {
+            "node": "Route to Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Channel": {
+      "main": [
+        [
+          {
+            "node": "Send Meta Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send TikTok Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Gmail Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Meta Message": {
+      "main": [
+        [
+          {
+            "node": "Merge Channel Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send TikTok Message": {
+      "main": [
+        [
+          {
+            "node": "Merge Channel Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Gmail Reply": {
+      "main": [
+        [
+          {
+            "node": "Merge Channel Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Channel Results": {
+      "main": [
+        [
+          {
+            "node": "Log Sent Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Sent Message": {
+      "main": [
+        [
+          {
+            "node": "Update Conversation Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Conversation Stage": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "actions"
+    },
+    {
+      "name": "send"
+    }
+  ],
+  "triggerCount": 0,
+  "pinData": {}
+}
