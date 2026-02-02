@@ -1,0 +1,894 @@
+{
+  "workflows": [
+    {
+      "name": "WF-INGEST-META",
+      "nodes": [
+        {
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "webhook/meta",
+            "options": {}
+          },
+          "id": "webhook-meta",
+          "name": "Webhook Meta",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [240, 300],
+          "webhookId": "meta-ingestion"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict"
+              },
+              "conditions": [
+                {
+                  "id": "verify-meta",
+                  "leftValue": "={{ $json.object }}",
+                  "rightValue": "page",
+                  "operator": {
+                    "type": "string",
+                    "operation": "equals"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "id": "filter-valid",
+          "name": "Filter Valid Messages",
+          "type": "n8n-nodes-base.filter",
+          "typeVersion": 2,
+          "position": [460, 300]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "// Normalize Meta webhook payload to standard format\nconst entry = $input.item.json.entry?.[0];\nconst messaging = entry?.messaging?.[0];\nconst message = messaging?.message;\nconst sender = messaging?.sender;\n\nif (!message || !sender) {\n  return { json: { error: 'Invalid message structure', skip: true } };\n}\n\n// Determine if it's from Instagram or Facebook\nconst isInstagram = entry?.id?.startsWith('17') || $input.item.json.object === 'instagram';\nconst platform = isInstagram ? 'instagram' : 'facebook';\n\nconst normalized = {\n  source: 'meta',\n  platform: platform,\n  conversation_id: `meta_${sender.id}_${entry?.id}`,\n  sender_id: sender.id,\n  sender_name: messaging?.sender?.name || 'Unknown',\n  message: message.text || '',\n  message_id: message.mid,\n  timestamp: new Date(messaging.timestamp).toISOString(),\n  is_echo: message.is_echo || false,\n  attachments: message.attachments || [],\n  metadata: {\n    page_id: entry?.id,\n    recipient_id: messaging?.recipient?.id,\n    nlp: message.nlp || null,\n    reply_to: message.reply_to || null\n  }\n};\n\nreturn { json: normalized };"
+          },
+          "id": "normalize-meta",
+          "name": "Normalize Meta Data",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [680, 300]
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {
+                "caseSensitive": true,
+                "leftValue": "",
+                "typeValidation": "strict"
+              },
+              "conditions": [
+                {
+                  "id": "skip-echo",
+                  "leftValue": "={{ $json.is_echo }}",
+                  "rightValue": false,
+                  "operator": {
+                    "type": "boolean",
+                    "operation": "equals"
+                  }
+                },
+                {
+                  "id": "has-message",
+                  "leftValue": "={{ $json.message }}",
+                  "rightValue": "",
+                  "operator": {
+                    "type": "string",
+                    "operation": "notEquals"
+                  }
+                }
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "id": "filter-echo",
+          "name": "Skip Echo Messages",
+          "type": "n8n-nodes-base.filter",
+          "typeVersion": 2,
+          "position": [900, 300]
+        },
+        {
+          "parameters": {
+            "workflowId": "={{ $env.WF_CORE_BRAIN_ID }}",
+            "options": {}
+          },
+          "id": "call-brain",
+          "name": "Call Brain",
+          "type": "n8n-nodes-base.executeWorkflow",
+          "typeVersion": 1,
+          "position": [1120, 300]
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={{ JSON.stringify({ status: 'received', message_id: $json.message_id }) }}",
+            "options": {}
+          },
+          "id": "respond-webhook",
+          "name": "Respond to Webhook",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1.1,
+          "position": [1340, 300]
+        }
+      ],
+      "connections": {
+        "Webhook Meta": {
+          "main": [[{"node": "Filter Valid Messages", "type": "main", "index": 0}]]
+        },
+        "Filter Valid Messages": {
+          "main": [[{"node": "Normalize Meta Data", "type": "main", "index": 0}]]
+        },
+        "Normalize Meta Data": {
+          "main": [[{"node": "Skip Echo Messages", "type": "main", "index": 0}]]
+        },
+        "Skip Echo Messages": {
+          "main": [[{"node": "Call Brain", "type": "main", "index": 0}]]
+        },
+        "Call Brain": {
+          "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+        }
+      },
+      "settings": {"executionOrder": "v1"},
+      "tags": [{"name": "ingestion"}, {"name": "meta"}]
+    },
+    {
+      "name": "WF-INGEST-TIKTOK",
+      "nodes": [
+        {
+          "parameters": {
+            "httpMethod": "POST",
+            "path": "webhook/tiktok",
+            "options": {}
+          },
+          "id": "webhook-tiktok",
+          "name": "Webhook TikTok",
+          "type": "n8n-nodes-base.webhook",
+          "typeVersion": 2,
+          "position": [240, 300],
+          "webhookId": "tiktok-ingestion"
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+              "conditions": [{"id": "verify-event", "leftValue": "={{ $json.event }}", "rightValue": "", "operator": {"type": "string", "operation": "notEmpty"}}],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "id": "filter-valid",
+          "name": "Filter Valid Events",
+          "type": "n8n-nodes-base.filter",
+          "typeVersion": 2,
+          "position": [460, 300]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const data = $input.item.json;\nconst event = data.event;\nconst content = data.content || data.message || {};\nconst user = data.user || data.sender || {};\n\nif (!event) {\n  return { json: { error: 'Invalid event structure', skip: true } };\n}\n\nlet messageText = '';\nlet messageType = 'text';\n\nif (content.text) {\n  messageText = content.text;\n} else if (content.media_url) {\n  messageText = '[Media]';\n  messageType = 'media';\n} else if (content.share_info) {\n  messageText = '[Shared Content]';\n  messageType = 'share';\n}\n\nconst normalized = {\n  source: 'tiktok',\n  platform: 'tiktok',\n  conversation_id: `tiktok_${user.open_id || user.user_id}_${data.conversation_id || Date.now()}`,\n  sender_id: user.open_id || user.user_id || 'unknown',\n  sender_name: user.display_name || user.nickname || 'TikTok User',\n  message: messageText,\n  message_id: data.message_id || data.msg_id || `tiktok_${Date.now()}`,\n  message_type: messageType,\n  timestamp: data.create_time ? new Date(data.create_time * 1000).toISOString() : new Date().toISOString(),\n  is_echo: false,\n  attachments: content.media_url ? [{ type: 'media', url: content.media_url }] : [],\n  metadata: {\n    event_type: event,\n    conversation_id: data.conversation_id,\n    avatar_url: user.avatar_url,\n    follower_count: user.follower_count\n  }\n};\n\nreturn { json: normalized };"
+          },
+          "id": "normalize-tiktok",
+          "name": "Normalize TikTok Data",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [680, 300]
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+              "conditions": [
+                {"id": "has-message", "leftValue": "={{ $json.message }}", "rightValue": "", "operator": {"type": "string", "operation": "notEquals"}},
+                {"id": "not-skip", "leftValue": "={{ $json.skip }}", "rightValue": true, "operator": {"type": "boolean", "operation": "notEquals"}}
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "id": "filter-empty",
+          "name": "Skip Empty Messages",
+          "type": "n8n-nodes-base.filter",
+          "typeVersion": 2,
+          "position": [900, 300]
+        },
+        {
+          "parameters": {"workflowId": "={{ $env.WF_CORE_BRAIN_ID }}", "options": {}},
+          "id": "call-brain",
+          "name": "Call Brain",
+          "type": "n8n-nodes-base.executeWorkflow",
+          "typeVersion": 1,
+          "position": [1120, 300]
+        },
+        {
+          "parameters": {
+            "respondWith": "json",
+            "responseBody": "={{ JSON.stringify({ status: 'received', message_id: $json.message_id }) }}",
+            "options": {}
+          },
+          "id": "respond-webhook",
+          "name": "Respond to Webhook",
+          "type": "n8n-nodes-base.respondToWebhook",
+          "typeVersion": 1.1,
+          "position": [1340, 300]
+        }
+      ],
+      "connections": {
+        "Webhook TikTok": {"main": [[{"node": "Filter Valid Events", "type": "main", "index": 0}]]},
+        "Filter Valid Events": {"main": [[{"node": "Normalize TikTok Data", "type": "main", "index": 0}]]},
+        "Normalize TikTok Data": {"main": [[{"node": "Skip Empty Messages", "type": "main", "index": 0}]]},
+        "Skip Empty Messages": {"main": [[{"node": "Call Brain", "type": "main", "index": 0}]]},
+        "Call Brain": {"main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]}
+      },
+      "settings": {"executionOrder": "v1"},
+      "tags": [{"name": "ingestion"}, {"name": "tiktok"}]
+    },
+    {
+      "name": "WF-INGEST-GMAIL",
+      "nodes": [
+        {
+          "parameters": {
+            "pollTimes": {"item": [{"mode": "everyMinute"}]},
+            "filters": {"readStatus": "unread", "receivedAfter": "={{ $now.minus(1, 'hour').toISO() }}"},
+            "options": {"downloadAttachments": true}
+          },
+          "id": "gmail-trigger",
+          "name": "Gmail Trigger",
+          "type": "n8n-nodes-base.gmailTrigger",
+          "typeVersion": 1.1,
+          "position": [240, 300],
+          "credentials": {"gmailOAuth2": {"id": "gmail-credentials", "name": "Gmail OAuth2"}}
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
+              "conditions": [
+                {"id": "not-noreply", "leftValue": "={{ $json.from.email }}", "rightValue": "noreply", "operator": {"type": "string", "operation": "notContains"}},
+                {"id": "not-automated", "leftValue": "={{ $json.from.email }}", "rightValue": "mailer-daemon", "operator": {"type": "string", "operation": "notContains"}}
+              ],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "id": "filter-auto",
+          "name": "Filter Automated Emails",
+          "type": "n8n-nodes-base.filter",
+          "typeVersion": 2,
+          "position": [460, 300]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const email = $input.item.json;\nlet messageText = email.text || email.snippet || '';\nmessageText = messageText.replace(/\\r\\n/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();\n\nconst fromEmail = email.from?.email || email.from || '';\nconst fromName = email.from?.name || fromEmail.split('@')[0] || 'Unknown';\nconst threadId = email.threadId || email.id;\n\nconst normalized = {\n  source: 'gmail',\n  platform: 'email',\n  conversation_id: `gmail_${threadId}`,\n  sender_id: fromEmail,\n  sender_name: fromName,\n  message: messageText,\n  message_id: email.id || `gmail_${Date.now()}`,\n  timestamp: email.date ? new Date(email.date).toISOString() : new Date().toISOString(),\n  is_echo: false,\n  attachments: (email.attachments || []).map(att => ({type: att.mimeType || 'unknown', filename: att.filename, size: att.size})),\n  metadata: {\n    subject: email.subject || '(No Subject)',\n    thread_id: threadId,\n    labels: email.labelIds || [],\n    to: email.to,\n    cc: email.cc,\n    has_attachments: (email.attachments || []).length > 0\n  }\n};\n\nreturn { json: normalized };"
+          },
+          "id": "normalize-gmail",
+          "name": "Normalize Gmail Data",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [680, 300]
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+              "conditions": [{"id": "has-message", "leftValue": "={{ $json.message }}", "rightValue": "", "operator": {"type": "string", "operation": "notEquals"}}],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "id": "filter-empty",
+          "name": "Skip Empty Messages",
+          "type": "n8n-nodes-base.filter",
+          "typeVersion": 2,
+          "position": [900, 300]
+        },
+        {
+          "parameters": {"workflowId": "={{ $env.WF_CORE_BRAIN_ID }}", "options": {}},
+          "id": "call-brain",
+          "name": "Call Brain",
+          "type": "n8n-nodes-base.executeWorkflow",
+          "typeVersion": 1,
+          "position": [1120, 300]
+        },
+        {
+          "parameters": {"messageId": "={{ $('Gmail Trigger').item.json.id }}", "labelIds": ["INBOX"], "options": {}},
+          "id": "mark-read",
+          "name": "Mark as Read",
+          "type": "n8n-nodes-base.gmail",
+          "typeVersion": 2.1,
+          "position": [1340, 300],
+          "credentials": {"gmailOAuth2": {"id": "gmail-credentials", "name": "Gmail OAuth2"}}
+        }
+      ],
+      "connections": {
+        "Gmail Trigger": {"main": [[{"node": "Filter Automated Emails", "type": "main", "index": 0}]]},
+        "Filter Automated Emails": {"main": [[{"node": "Normalize Gmail Data", "type": "main", "index": 0}]]},
+        "Normalize Gmail Data": {"main": [[{"node": "Skip Empty Messages", "type": "main", "index": 0}]]},
+        "Skip Empty Messages": {"main": [[{"node": "Call Brain", "type": "main", "index": 0}]]},
+        "Call Brain": {"main": [[{"node": "Mark as Read", "type": "main", "index": 0}]]}
+      },
+      "settings": {"executionOrder": "v1"},
+      "tags": [{"name": "ingestion"}, {"name": "gmail"}]
+    },
+    {
+      "name": "WF-CORE-BRAIN",
+      "nodes": [
+        {
+          "parameters": {},
+          "id": "start-trigger",
+          "name": "Execute Workflow Trigger",
+          "type": "n8n-nodes-base.executeWorkflowTrigger",
+          "typeVersion": 1,
+          "position": [240, 300]
+        },
+        {
+          "parameters": {
+            "operation": "select",
+            "tableId": "conversations",
+            "filterType": "string",
+            "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+            "options": {"returnCount": "exactCount"}
+          },
+          "id": "check-duplicate",
+          "name": "Check Duplicate",
+          "type": "n8n-nodes-base.supabase",
+          "typeVersion": 1,
+          "position": [460, 300],
+          "credentials": {"supabaseApi": {"id": "supabase-credentials", "name": "Supabase"}}
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst existingConversation = $('Check Duplicate').item.json;\nconst messageId = $('Execute Workflow Trigger').item.json.message_id;\nconst lastMessageId = existingConversation?.last_message_id;\nconst isDuplicate = lastMessageId === messageId;\nconst currentStage = existingConversation?.stage || 'new';\nconst conversationHistory = existingConversation?.history || [];\n\nreturn {\n  json: {\n    ...$('Execute Workflow Trigger').item.json,\n    is_duplicate: isDuplicate,\n    current_stage: currentStage,\n    conversation_exists: !!existingConversation?.conversation_id,\n    conversation_history: conversationHistory,\n    message_count: existingConversation?.message_count || 0\n  }\n};"
+          },
+          "id": "process-duplicate",
+          "name": "Process Duplicate Check",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [680, 300]
+        },
+        {
+          "parameters": {
+            "conditions": {
+              "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+              "conditions": [{"id": "not-duplicate", "leftValue": "={{ $json.is_duplicate }}", "rightValue": false, "operator": {"type": "boolean", "operation": "equals"}}],
+              "combinator": "and"
+            },
+            "options": {}
+          },
+          "id": "filter-duplicate",
+          "name": "Skip Duplicates",
+          "type": "n8n-nodes-base.filter",
+          "typeVersion": 2,
+          "position": [900, 300]
+        },
+        {
+          "parameters": {
+            "model": "gpt-4o",
+            "messages": {
+              "values": [
+                {"role": "system", "content": "Tu es un assistant intelligent qui analyse les messages entrants pour determiner l'intention de l'utilisateur.\n\nAnalyse le message et retourne un JSON avec:\n- intent: greeting|question|booking|complaint|thanks|other\n- confidence: 0.0 a 1.0\n- entities: liste des entites detectees (dates, noms, etc.)\n- sentiment: positive|neutral|negative\n- requires_booking: true si le message indique une intention de reserver\n- requires_human: true si le message necessite une intervention humaine\n\nReponds UNIQUEMENT avec le JSON, sans texte supplementaire."},
+                {"role": "user", "content": "=Message: {{ $json.message }}\n\nHistorique recent: {{ JSON.stringify($json.conversation_history.slice(-3)) }}\n\nStage actuel: {{ $json.current_stage }}"}
+              ]
+            },
+            "options": {"temperature": 0.3, "responseFormat": "json_object"}
+          },
+          "id": "detect-intent",
+          "name": "Detect Intent (OpenAI)",
+          "type": "@n8n/n8n-nodes-langchain.openAi",
+          "typeVersion": 1.4,
+          "position": [1120, 300],
+          "credentials": {"openAiApi": {"id": "openai-credentials", "name": "OpenAI"}}
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst intentResponse = $('Detect Intent (OpenAI)').item.json.message.content;\n\nlet intent;\ntry {\n  intent = JSON.parse(intentResponse);\n} catch (e) {\n  intent = {intent: 'other', confidence: 0.5, entities: [], sentiment: 'neutral', requires_booking: false, requires_human: false};\n}\n\n// Guardrails\nconst message = input.message.toLowerCase();\nconst sensitiveKeywords = ['suicide', 'urgence', 'danger', 'menace', 'avocat', 'police', 'juridique'];\nconst containsSensitive = sensitiveKeywords.some(kw => message.includes(kw));\n\nif (containsSensitive) {\n  intent.requires_human = true;\n  intent.handoff_reason = 'sensitive_content';\n}\n\nconst MAX_AUTO_MESSAGES = 10;\nif (input.message_count >= MAX_AUTO_MESSAGES && !intent.requires_booking) {\n  intent.requires_human = true;\n  intent.handoff_reason = 'max_messages_reached';\n}\n\nif (intent.sentiment === 'negative' && intent.confidence > 0.8) {\n  intent.requires_human = true;\n  intent.handoff_reason = 'negative_sentiment';\n}\n\nreturn {\n  json: {\n    ...input,\n    intent: intent.intent,\n    intent_confidence: intent.confidence,\n    entities: intent.entities,\n    sentiment: intent.sentiment,\n    requires_booking: intent.requires_booking,\n    requires_human: intent.requires_human,\n    handoff_reason: intent.handoff_reason || null\n  }\n};"
+          },
+          "id": "apply-guardrails",
+          "name": "Apply Guardrails",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [1340, 300]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\n\nconst stageTransitions = {\n  'new': {'greeting': 'new', 'question': 'qualified', 'booking': 'booking', 'complaint': 'qualified', 'thanks': 'new', 'other': 'new'},\n  'qualified': {'greeting': 'qualified', 'question': 'qualified', 'booking': 'booking', 'complaint': 'qualified', 'thanks': 'qualified', 'other': 'qualified'},\n  'booking': {'greeting': 'booking', 'question': 'booking', 'booking': 'booking', 'complaint': 'booking', 'thanks': 'closed', 'other': 'booking'},\n  'closed': {'greeting': 'new', 'question': 'qualified', 'booking': 'booking', 'complaint': 'qualified', 'thanks': 'closed', 'other': 'closed'}\n};\n\nconst currentStage = input.current_stage || 'new';\nconst intent = input.intent || 'other';\nconst newStage = stageTransitions[currentStage]?.[intent] || currentStage;\n\nreturn {\n  json: {...input, new_stage: newStage, stage_changed: newStage !== currentStage}\n};"
+          },
+          "id": "update-stage",
+          "name": "Update Stage",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [1560, 300]
+        },
+        {
+          "parameters": {
+            "rules": {
+              "values": [
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.requires_human }}", "rightValue": true, "operator": {"type": "boolean", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "handoff"},
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.requires_booking }}", "rightValue": true, "operator": {"type": "boolean", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "booking"},
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.requires_human }}", "rightValue": false, "operator": {"type": "boolean", "operation": "equals"}}, {"leftValue": "={{ $json.requires_booking }}", "rightValue": false, "operator": {"type": "boolean", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "auto_reply"}
+              ]
+            },
+            "options": {}
+          },
+          "id": "route-action",
+          "name": "Route Action",
+          "type": "n8n-nodes-base.switch",
+          "typeVersion": 3,
+          "position": [1780, 300]
+        },
+        {
+          "parameters": {
+            "model": "gpt-4o",
+            "messages": {
+              "values": [
+                {"role": "system", "content": "Tu es un assistant conversationnel amical et professionnel. Tu representes une entreprise et dois repondre aux messages de maniere naturelle et engageante.\n\nRegles:\n- Sois concis mais chaleureux\n- Adapte ton ton au canal (plus decontracte sur Instagram/TikTok, plus formel par email)\n- Ne fais jamais de promesses que tu ne peux pas tenir\n- Encourage subtilement la prise de rendez-vous quand c'est pertinent\n- Reponds en francais\n\nRetourne UNIQUEMENT le texte de la reponse."},
+                {"role": "user", "content": "=Canal: {{ $json.source }} ({{ $json.platform }})\nMessage client: {{ $json.message }}\nIntent detecte: {{ $json.intent }}\nStage: {{ $json.new_stage }}\n\nGenere une reponse appropriee:"}
+              ]
+            },
+            "options": {"temperature": 0.7}
+          },
+          "id": "generate-reply",
+          "name": "Generate Reply (OpenAI)",
+          "type": "@n8n/n8n-nodes-langchain.openAi",
+          "typeVersion": 1.4,
+          "position": [2000, 400],
+          "credentials": {"openAiApi": {"id": "openai-credentials", "name": "OpenAI"}}
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst handoffMessage = 'Merci pour votre message. Un membre de notre equipe va prendre le relais et vous repondra dans les plus brefs delais.';\n\nreturn {\n  json: {\n    reply_text: handoffMessage,\n    action: 'handoff',\n    handoff: true,\n    handoff_reason: input.handoff_reason,\n    stage: input.new_stage,\n    intent: input.intent,\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id\n  }\n};"
+          },
+          "id": "prepare-handoff",
+          "name": "Prepare Handoff",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [2000, 200]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst bookingMessage = 'Super ! Je serais ravi de vous aider a reserver. Pour finaliser votre rendez-vous, j\\'aurais besoin de quelques informations.';\n\nreturn {\n  json: {\n    reply_text: bookingMessage,\n    action: 'book',\n    handoff: false,\n    stage: 'booking',\n    intent: input.intent,\n    entities: input.entities,\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id\n  }\n};"
+          },
+          "id": "prepare-booking",
+          "name": "Prepare Booking",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [2000, 300]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst replyText = $('Generate Reply (OpenAI)').item.json.message.content;\n\nreturn {\n  json: {\n    reply_text: replyText,\n    action: 'send',\n    handoff: false,\n    stage: input.new_stage,\n    intent: input.intent,\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id\n  }\n};"
+          },
+          "id": "prepare-reply",
+          "name": "Prepare Reply",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [2220, 400]
+        },
+        {
+          "parameters": {},
+          "id": "merge-outputs",
+          "name": "Merge Outputs",
+          "type": "n8n-nodes-base.merge",
+          "typeVersion": 3,
+          "position": [2440, 300]
+        },
+        {
+          "parameters": {
+            "operation": "upsert",
+            "tableId": "conversations",
+            "filterType": "string",
+            "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+            "dataToSend": "autoMapInputData",
+            "options": {}
+          },
+          "id": "save-state",
+          "name": "Save Conversation State",
+          "type": "n8n-nodes-base.supabase",
+          "typeVersion": 1,
+          "position": [2660, 300],
+          "credentials": {"supabaseApi": {"id": "supabase-credentials", "name": "Supabase"}}
+        },
+        {
+          "parameters": {
+            "assignments": {"assignments": [{"id": "output", "name": "output", "value": "={{ $json }}", "type": "object"}]},
+            "options": {}
+          },
+          "id": "return-output",
+          "name": "Return Output",
+          "type": "n8n-nodes-base.set",
+          "typeVersion": 3.4,
+          "position": [2880, 300]
+        }
+      ],
+      "connections": {
+        "Execute Workflow Trigger": {"main": [[{"node": "Check Duplicate", "type": "main", "index": 0}]]},
+        "Check Duplicate": {"main": [[{"node": "Process Duplicate Check", "type": "main", "index": 0}]]},
+        "Process Duplicate Check": {"main": [[{"node": "Skip Duplicates", "type": "main", "index": 0}]]},
+        "Skip Duplicates": {"main": [[{"node": "Detect Intent (OpenAI)", "type": "main", "index": 0}]]},
+        "Detect Intent (OpenAI)": {"main": [[{"node": "Apply Guardrails", "type": "main", "index": 0}]]},
+        "Apply Guardrails": {"main": [[{"node": "Update Stage", "type": "main", "index": 0}]]},
+        "Update Stage": {"main": [[{"node": "Route Action", "type": "main", "index": 0}]]},
+        "Route Action": {"main": [[{"node": "Prepare Handoff", "type": "main", "index": 0}], [{"node": "Prepare Booking", "type": "main", "index": 0}], [{"node": "Generate Reply (OpenAI)", "type": "main", "index": 0}]]},
+        "Prepare Handoff": {"main": [[{"node": "Merge Outputs", "type": "main", "index": 0}]]},
+        "Prepare Booking": {"main": [[{"node": "Merge Outputs", "type": "main", "index": 0}]]},
+        "Generate Reply (OpenAI)": {"main": [[{"node": "Prepare Reply", "type": "main", "index": 0}]]},
+        "Prepare Reply": {"main": [[{"node": "Merge Outputs", "type": "main", "index": 0}]]},
+        "Merge Outputs": {"main": [[{"node": "Save Conversation State", "type": "main", "index": 0}]]},
+        "Save Conversation State": {"main": [[{"node": "Return Output", "type": "main", "index": 0}]]}
+      },
+      "settings": {"executionOrder": "v1"},
+      "tags": [{"name": "core"}, {"name": "brain"}]
+    },
+    {
+      "name": "WF-ACTIONS-SEND",
+      "nodes": [
+        {
+          "parameters": {},
+          "id": "start-trigger",
+          "name": "Execute Workflow Trigger",
+          "type": "n8n-nodes-base.executeWorkflowTrigger",
+          "typeVersion": 1,
+          "position": [240, 300]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst replyText = input.reply_text || '';\n\n// Base delay: 2-5 seconds\nconst baseDelay = Math.floor(Math.random() * 3000) + 2000;\n// Typing delay: 50ms per char, max 10s\nconst typingDelay = Math.min(replyText.length * 50, 10000);\n// Random variation: 0-2 seconds\nconst randomVariation = Math.floor(Math.random() * 2000);\n\nconst totalDelay = baseDelay + typingDelay + randomVariation;\nconst delaySeconds = Math.ceil(totalDelay / 1000);\n\nreturn {\n  json: {...input, delay_ms: totalDelay, delay_seconds: delaySeconds}\n};"
+          },
+          "id": "calculate-delay",
+          "name": "Calculate Human Delay",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [460, 300]
+        },
+        {
+          "parameters": {"amount": "={{ $json.delay_seconds }}", "unit": "seconds"},
+          "id": "wait-human",
+          "name": "Wait (Human Style)",
+          "type": "n8n-nodes-base.wait",
+          "typeVersion": 1.1,
+          "position": [680, 300]
+        },
+        {
+          "parameters": {
+            "rules": {
+              "values": [
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.source }}", "rightValue": "meta", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "meta"},
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.source }}", "rightValue": "tiktok", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "tiktok"},
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.source }}", "rightValue": "gmail", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "gmail"}
+              ]
+            },
+            "options": {}
+          },
+          "id": "route-channel",
+          "name": "Route to Channel",
+          "type": "n8n-nodes-base.switch",
+          "typeVersion": 3,
+          "position": [900, 300]
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "=https://graph.facebook.com/v18.0/{{ $json.metadata.page_id }}/messages",
+            "authentication": "predefinedCredentialType",
+            "nodeCredentialType": "facebookGraphApi",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\"recipient\": {\"id\": \"{{ $json.sender_id }}\"}, \"messaging_type\": \"RESPONSE\", \"message\": {\"text\": {{ JSON.stringify($json.reply_text) }}}}",
+            "options": {}
+          },
+          "id": "send-meta",
+          "name": "Send Meta Message",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [1120, 200],
+          "credentials": {"facebookGraphApi": {"id": "meta-credentials", "name": "Meta Graph API"}}
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "=https://open.tiktokapis.com/v2/message/send/",
+            "authentication": "predefinedCredentialType",
+            "nodeCredentialType": "httpHeaderAuth",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\"conversation_id\": \"{{ $json.metadata.conversation_id }}\", \"content\": {\"text\": {{ JSON.stringify($json.reply_text) }}}}",
+            "options": {}
+          },
+          "id": "send-tiktok",
+          "name": "Send TikTok Message",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [1120, 300],
+          "credentials": {"httpHeaderAuth": {"id": "tiktok-credentials", "name": "TikTok API"}}
+        },
+        {
+          "parameters": {
+            "sendTo": "={{ $json.sender_id }}",
+            "subject": "=Re: {{ $json.metadata.subject }}",
+            "emailType": "text",
+            "message": "={{ $json.reply_text }}",
+            "options": {"replyTo": "={{ $json.sender_id }}", "appendAttribution": false}
+          },
+          "id": "send-gmail",
+          "name": "Send Gmail Reply",
+          "type": "n8n-nodes-base.gmail",
+          "typeVersion": 2.1,
+          "position": [1120, 400],
+          "credentials": {"gmailOAuth2": {"id": "gmail-credentials", "name": "Gmail OAuth2"}}
+        },
+        {
+          "parameters": {},
+          "id": "merge-channels",
+          "name": "Merge Channel Results",
+          "type": "n8n-nodes-base.merge",
+          "typeVersion": 3,
+          "position": [1340, 300]
+        },
+        {
+          "parameters": {
+            "operation": "insert",
+            "tableId": "message_logs",
+            "dataToSend": "defineBelow",
+            "fieldsUi": {
+              "fieldValues": [
+                {"fieldName": "conversation_id", "fieldValue": "={{ $json.conversation_id }}"},
+                {"fieldName": "message_id", "fieldValue": "={{ $json.message_id }}"},
+                {"fieldName": "direction", "fieldValue": "outbound"},
+                {"fieldName": "source", "fieldValue": "={{ $json.source }}"},
+                {"fieldName": "content", "fieldValue": "={{ $json.reply_text }}"},
+                {"fieldName": "stage", "fieldValue": "={{ $json.stage }}"},
+                {"fieldName": "intent", "fieldValue": "={{ $json.intent }}"},
+                {"fieldName": "sent_at", "fieldValue": "={{ $now.toISO() }}"},
+                {"fieldName": "delay_applied_ms", "fieldValue": "={{ $json.delay_ms }}"}
+              ]
+            },
+            "options": {}
+          },
+          "id": "log-message",
+          "name": "Log Sent Message",
+          "type": "n8n-nodes-base.supabase",
+          "typeVersion": 1,
+          "position": [1560, 300],
+          "credentials": {"supabaseApi": {"id": "supabase-credentials", "name": "Supabase"}}
+        },
+        {
+          "parameters": {
+            "operation": "update",
+            "tableId": "conversations",
+            "filterType": "string",
+            "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+            "dataToSend": "defineBelow",
+            "fieldsUi": {
+              "fieldValues": [
+                {"fieldName": "stage", "fieldValue": "={{ $json.stage }}"},
+                {"fieldName": "last_reply_at", "fieldValue": "={{ $now.toISO() }}"},
+                {"fieldName": "last_message_id", "fieldValue": "={{ $json.message_id }}"}
+              ]
+            },
+            "options": {}
+          },
+          "id": "update-stage",
+          "name": "Update Conversation Stage",
+          "type": "n8n-nodes-base.supabase",
+          "typeVersion": 1,
+          "position": [1780, 300],
+          "credentials": {"supabaseApi": {"id": "supabase-credentials", "name": "Supabase"}}
+        },
+        {
+          "parameters": {
+            "assignments": {"assignments": [{"id": "result", "name": "result", "value": "={{ { success: true, conversation_id: $json.conversation_id, channel: $json.source, stage: $json.stage } }}", "type": "object"}]},
+            "options": {}
+          },
+          "id": "return-result",
+          "name": "Return Result",
+          "type": "n8n-nodes-base.set",
+          "typeVersion": 3.4,
+          "position": [2000, 300]
+        }
+      ],
+      "connections": {
+        "Execute Workflow Trigger": {"main": [[{"node": "Calculate Human Delay", "type": "main", "index": 0}]]},
+        "Calculate Human Delay": {"main": [[{"node": "Wait (Human Style)", "type": "main", "index": 0}]]},
+        "Wait (Human Style)": {"main": [[{"node": "Route to Channel", "type": "main", "index": 0}]]},
+        "Route to Channel": {"main": [[{"node": "Send Meta Message", "type": "main", "index": 0}], [{"node": "Send TikTok Message", "type": "main", "index": 0}], [{"node": "Send Gmail Reply", "type": "main", "index": 0}]]},
+        "Send Meta Message": {"main": [[{"node": "Merge Channel Results", "type": "main", "index": 0}]]},
+        "Send TikTok Message": {"main": [[{"node": "Merge Channel Results", "type": "main", "index": 0}]]},
+        "Send Gmail Reply": {"main": [[{"node": "Merge Channel Results", "type": "main", "index": 0}]]},
+        "Merge Channel Results": {"main": [[{"node": "Log Sent Message", "type": "main", "index": 0}]]},
+        "Log Sent Message": {"main": [[{"node": "Update Conversation Stage", "type": "main", "index": 0}]]},
+        "Update Conversation Stage": {"main": [[{"node": "Return Result", "type": "main", "index": 0}]]}
+      },
+      "settings": {"executionOrder": "v1"},
+      "tags": [{"name": "actions"}, {"name": "send"}]
+    },
+    {
+      "name": "WF-ACUITY-BOOK",
+      "nodes": [
+        {
+          "parameters": {},
+          "id": "start-trigger",
+          "name": "Execute Workflow Trigger",
+          "type": "n8n-nodes-base.executeWorkflowTrigger",
+          "typeVersion": 1,
+          "position": [240, 300]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst entities = input.entities || [];\n\nconst requiredFields = {name: null, email: null, phone: null, date: null, time: null, service: null};\n\nfor (const entity of entities) {\n  if (entity.type === 'name' || entity.label === 'name') requiredFields.name = entity.value;\n  if (entity.type === 'email' || entity.label === 'email') requiredFields.email = entity.value;\n  if (entity.type === 'phone' || entity.label === 'phone') requiredFields.phone = entity.value;\n  if (entity.type === 'date' || entity.label === 'date') requiredFields.date = entity.value;\n  if (entity.type === 'time' || entity.label === 'time') requiredFields.time = entity.value;\n  if (entity.type === 'service' || entity.label === 'service') requiredFields.service = entity.value;\n}\n\nif (!requiredFields.name && input.sender_name && input.sender_name !== 'Unknown') {\n  requiredFields.name = input.sender_name;\n}\n\nconst missingFields = Object.entries(requiredFields).filter(([key, value]) => !value).map(([key]) => key);\nconst isComplete = missingFields.length === 0;\nconst hasMinimumInfo = requiredFields.name && (requiredFields.email || requiredFields.phone);\n\nreturn {\n  json: {...input, booking_info: requiredFields, missing_fields: missingFields, is_complete: isComplete, has_minimum_info: hasMinimumInfo}\n};"
+          },
+          "id": "check-info",
+          "name": "Check Booking Info",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [460, 300]
+        },
+        {
+          "parameters": {
+            "rules": {
+              "values": [
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.is_complete }}", "rightValue": true, "operator": {"type": "boolean", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "complete"},
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.has_minimum_info }}", "rightValue": true, "operator": {"type": "boolean", "operation": "equals"}}, {"leftValue": "={{ $json.is_complete }}", "rightValue": false, "operator": {"type": "boolean", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "partial"},
+                {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"}, "conditions": [{"leftValue": "={{ $json.has_minimum_info }}", "rightValue": false, "operator": {"type": "boolean", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "missing"}
+              ]
+            },
+            "options": {}
+          },
+          "id": "route-completeness",
+          "name": "Route by Completeness",
+          "type": "n8n-nodes-base.switch",
+          "typeVersion": 3,
+          "position": [680, 300]
+        },
+        {
+          "parameters": {
+            "method": "POST",
+            "url": "https://acuityscheduling.com/api/v1/appointments",
+            "authentication": "genericCredentialType",
+            "genericAuthType": "httpBasicAuth",
+            "sendBody": true,
+            "specifyBody": "json",
+            "jsonBody": "={\"datetime\": \"{{ $json.booking_info.date }}T{{ $json.booking_info.time }}\", \"appointmentTypeID\": {{ $env.ACUITY_APPOINTMENT_TYPE_ID || 1 }}, \"firstName\": \"{{ $json.booking_info.name.split(' ')[0] }}\", \"lastName\": \"{{ $json.booking_info.name.split(' ').slice(1).join(' ') || '' }}\", \"email\": \"{{ $json.booking_info.email }}\", \"phone\": \"{{ $json.booking_info.phone }}\", \"notes\": \"Booked via automation from {{ $json.source }}\"}",
+            "options": {}
+          },
+          "id": "create-booking",
+          "name": "Create Acuity Booking",
+          "type": "n8n-nodes-base.httpRequest",
+          "typeVersion": 4.2,
+          "position": [900, 200],
+          "credentials": {"httpBasicAuth": {"id": "acuity-credentials", "name": "Acuity API"}}
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst bookingInfo = input.booking_info;\n\nconst baseUrl = 'https://app.acuityscheduling.com/schedule.php';\nconst params = new URLSearchParams();\n\nif (bookingInfo.name) {\n  const nameParts = bookingInfo.name.split(' ');\n  params.append('firstName', nameParts[0]);\n  if (nameParts.length > 1) params.append('lastName', nameParts.slice(1).join(' '));\n}\nif (bookingInfo.email) params.append('email', bookingInfo.email);\nif (bookingInfo.phone) params.append('phone', bookingInfo.phone);\n\nconst bookingLink = `${baseUrl}?${params.toString()}`;\n\nconst missingFieldsMessages = {'date': 'la date souhaitee', 'time': \"l'heure preferee\", 'service': 'le type de service', 'email': 'votre adresse email', 'phone': 'votre numero de telephone'};\nconst missingList = input.missing_fields.filter(f => missingFieldsMessages[f]).map(f => missingFieldsMessages[f]);\n\nlet responseText = '';\nif (missingList.length > 0) {\n  responseText = `Pour finaliser votre reservation, j'aurais besoin de ${missingList.join(', ')}. Vous pouvez aussi reserver directement via ce lien: ${bookingLink}`;\n} else {\n  responseText = `Voici le lien pour finaliser votre reservation: ${bookingLink}`;\n}\n\nreturn {\n  json: {...input, booking_link: bookingLink, reply_text: responseText, action: 'send_link', booking_status: 'link_sent'}\n};"
+          },
+          "id": "generate-link",
+          "name": "Generate Booking Link",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [900, 300]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst responseText = 'Pour reserver un rendez-vous, j\\'aurais besoin de quelques informations: votre nom, email ou telephone, ainsi que vos preferences de date et heure. Pouvez-vous me les communiquer ?';\n\nreturn {\n  json: {...input, reply_text: responseText, action: 'request_info', booking_status: 'awaiting_info'}\n};"
+          },
+          "id": "request-info",
+          "name": "Request Missing Info",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [900, 400]
+        },
+        {
+          "parameters": {
+            "mode": "runOnceForEachItem",
+            "jsCode": "const input = $input.item.json;\nconst bookingResult = $('Create Acuity Booking').item.json;\n\nconst confirmationId = bookingResult.id || bookingResult.confirmationNumber || 'N/A';\nconst datetime = bookingResult.datetime || `${input.booking_info.date} ${input.booking_info.time}`;\n\nconst responseText = `Votre rendez-vous est confirme pour le ${datetime}. Numero de confirmation: ${confirmationId}. A bientot !`;\n\nreturn {\n  json: {...input, booking_id: confirmationId, booking_datetime: datetime, reply_text: responseText, action: 'booking_confirmed', booking_status: 'confirmed'}\n};"
+          },
+          "id": "confirm-booking",
+          "name": "Confirm Booking",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
+          "position": [1120, 200]
+        },
+        {
+          "parameters": {},
+          "id": "merge-results",
+          "name": "Merge Results",
+          "type": "n8n-nodes-base.merge",
+          "typeVersion": 3,
+          "position": [1340, 300]
+        },
+        {
+          "parameters": {
+            "operation": "insert",
+            "tableId": "booking_logs",
+            "dataToSend": "defineBelow",
+            "fieldsUi": {
+              "fieldValues": [
+                {"fieldName": "conversation_id", "fieldValue": "={{ $json.conversation_id }}"},
+                {"fieldName": "sender_id", "fieldValue": "={{ $json.sender_id }}"},
+                {"fieldName": "source", "fieldValue": "={{ $json.source }}"},
+                {"fieldName": "booking_status", "fieldValue": "={{ $json.booking_status }}"},
+                {"fieldName": "booking_id", "fieldValue": "={{ $json.booking_id || null }}"},
+                {"fieldName": "booking_datetime", "fieldValue": "={{ $json.booking_datetime || null }}"},
+                {"fieldName": "booking_info", "fieldValue": "={{ JSON.stringify($json.booking_info) }}"},
+                {"fieldName": "missing_fields", "fieldValue": "={{ JSON.stringify($json.missing_fields) }}"},
+                {"fieldName": "created_at", "fieldValue": "={{ $now.toISO() }}"}
+              ]
+            },
+            "options": {}
+          },
+          "id": "log-booking",
+          "name": "Log Booking Attempt",
+          "type": "n8n-nodes-base.supabase",
+          "typeVersion": 1,
+          "position": [1560, 300],
+          "credentials": {"supabaseApi": {"id": "supabase-credentials", "name": "Supabase"}}
+        },
+        {
+          "parameters": {
+            "operation": "update",
+            "tableId": "conversations",
+            "filterType": "string",
+            "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+            "dataToSend": "defineBelow",
+            "fieldsUi": {
+              "fieldValues": [
+                {"fieldName": "stage", "fieldValue": "={{ $json.booking_status === 'confirmed' ? 'closed' : 'booking' }}"},
+                {"fieldName": "booking_status", "fieldValue": "={{ $json.booking_status }}"},
+                {"fieldName": "booking_id", "fieldValue": "={{ $json.booking_id || null }}"}
+              ]
+            },
+            "options": {}
+          },
+          "id": "update-conversation",
+          "name": "Update Conversation",
+          "type": "n8n-nodes-base.supabase",
+          "typeVersion": 1,
+          "position": [1780, 300],
+          "credentials": {"supabaseApi": {"id": "supabase-credentials", "name": "Supabase"}}
+        },
+        {
+          "parameters": {
+            "assignments": {"assignments": [{"id": "output", "name": "output", "value": "={{ { reply_text: $json.reply_text, action: $json.action, booking_status: $json.booking_status, booking_id: $json.booking_id, booking_link: $json.booking_link } }}", "type": "object"}]},
+            "options": {}
+          },
+          "id": "return-output",
+          "name": "Return Output",
+          "type": "n8n-nodes-base.set",
+          "typeVersion": 3.4,
+          "position": [2000, 300]
+        }
+      ],
+      "connections": {
+        "Execute Workflow Trigger": {"main": [[{"node": "Check Booking Info", "type": "main", "index": 0}]]},
+        "Check Booking Info": {"main": [[{"node": "Route by Completeness", "type": "main", "index": 0}]]},
+        "Route by Completeness": {"main": [[{"node": "Create Acuity Booking", "type": "main", "index": 0}], [{"node": "Generate Booking Link", "type": "main", "index": 0}], [{"node": "Request Missing Info", "type": "main", "index": 0}]]},
+        "Create Acuity Booking": {"main": [[{"node": "Confirm Booking", "type": "main", "index": 0}]]},
+        "Confirm Booking": {"main": [[{"node": "Merge Results", "type": "main", "index": 0}]]},
+        "Generate Booking Link": {"main": [[{"node": "Merge Results", "type": "main", "index": 0}]]},
+        "Request Missing Info": {"main": [[{"node": "Merge Results", "type": "main", "index": 0}]]},
+        "Merge Results": {"main": [[{"node": "Log Booking Attempt", "type": "main", "index": 0}]]},
+        "Log Booking Attempt": {"main": [[{"node": "Update Conversation", "type": "main", "index": 0}]]},
+        "Update Conversation": {"main": [[{"node": "Return Output", "type": "main", "index": 0}]]}
+      },
+      "settings": {"executionOrder": "v1"},
+      "tags": [{"name": "actions"}, {"name": "booking"}, {"name": "acuity"}]
+    }
+  ]
+}
