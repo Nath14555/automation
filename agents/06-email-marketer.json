@@ -1,0 +1,99 @@
+{
+  "agent_id": "email-marketer",
+  "name": "Email Marketer",
+  "role": "AI Email Marketer",
+  "description": "Gere la strategie email: sequences, newsletters, segmentation et optimisation.",
+  "priority": 3,
+  "category": "nurturing",
+
+  "capabilities": [
+    "email_copywriting",
+    "automated_sequences",
+    "list_segmentation",
+    "ab_testing",
+    "list_cleanup",
+    "personalization",
+    "email_reporting",
+    "reengagement_campaigns"
+  ],
+
+  "system_prompt": "Tu es un expert en email marketing avec une maitrise des sequences automatisees, de la segmentation et de l'optimisation. Tu rediges des emails persuasifs avec des taux d'ouverture et de clic eleves. Tu segmentes intelligemment les listes pour maximiser la pertinence et minimiser les desabonnements.",
+
+  "tools": [
+    "activecampaign_api",
+    "mailchimp_api",
+    "claude_api",
+    "crm_api",
+    "google_sheets"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-EMAIL-SEQUENCE",
+      "name": "Sequences email",
+      "trigger": "workflow_call",
+      "description": "Creation de sequences automatisees"
+    },
+    {
+      "id": "WF-EMAIL-NEWSLETTER",
+      "name": "Newsletter",
+      "trigger": "cron",
+      "schedule": "0 8 * * 4",
+      "description": "Newsletter hebdomadaire automatisee"
+    },
+    {
+      "id": "WF-EMAIL-SEGMENT",
+      "name": "Segmentation",
+      "trigger": "cron",
+      "schedule": "0 6 * * *",
+      "description": "Mise a jour quotidienne des segments"
+    },
+    {
+      "id": "WF-EMAIL-AB-TEST",
+      "name": "Tests A/B",
+      "trigger": "workflow_call",
+      "description": "Tests A/B sur les emails"
+    },
+    {
+      "id": "WF-EMAIL-REPORT",
+      "name": "Rapport email",
+      "trigger": "cron",
+      "schedule": "0 9 * * 1",
+      "description": "Rapport hebdomadaire de performance email"
+    },
+    {
+      "id": "WF-EMAIL-CLEANUP",
+      "name": "Nettoyage liste",
+      "trigger": "cron",
+      "schedule": "0 3 1 * *",
+      "description": "Nettoyage mensuel de la liste"
+    }
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "campaign_type": { "type": "string", "enum": ["sequence", "newsletter", "reengagement", "promotion"] },
+      "segment": { "type": "string" },
+      "subject_line": { "type": "string" },
+      "content_brief": { "type": "string" },
+      "cta": { "type": "string" },
+      "personalization_fields": { "type": "array" }
+    },
+    "required": ["campaign_type", "content_brief"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "email_html": { "type": "string" },
+      "subject_variants": { "type": "array" },
+      "send_time": { "type": "string" },
+      "segment_size": { "type": "number" },
+      "metrics": { "type": "object" }
+    }
+  },
+
+  "dependencies": ["marketing-strategist", "content-creator"],
+  "feeds_into": ["sales-closer", "analytics-analyst"]
+}

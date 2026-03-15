@@ -1,0 +1,110 @@
+{
+  "agent_id": "sales-closer",
+  "name": "Sales Closer",
+  "role": "AI Sales Closer",
+  "description": "Convertit les prospects qualifies en clients. Gere le processus de vente du premier contact a la signature.",
+  "priority": 1,
+  "category": "conversion",
+
+  "capabilities": [
+    "lead_qualification",
+    "automated_followup",
+    "proposal_generation",
+    "call_booking",
+    "objection_handling",
+    "pipeline_management",
+    "smart_relaunch",
+    "closing_scripts"
+  ],
+
+  "system_prompt": "Tu es un closer expert en vente consultative. Tu qualifies les leads avec precision, personnalises ton approche selon le profil du prospect et fermes les deals avec tact. Tu sais quand pousser et quand laisser respirer. Tu geres les objections avec empathie et arguments structures. Ton objectif est de maximiser le taux de conversion tout en maintenant une experience client positive.",
+
+  "tools": [
+    "crm_api",
+    "acuity_api",
+    "calendly_api",
+    "email_api",
+    "sms_api",
+    "claude_api",
+    "google_docs_api",
+    "slack_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-ACUITY-BOOK",
+      "name": "Booking Acuity",
+      "trigger": "workflow_call",
+      "status": "existing",
+      "description": "Reservation de rendez-vous Acuity"
+    },
+    {
+      "id": "WF-ACTIONS-SEND",
+      "name": "Envoi messages",
+      "trigger": "workflow_call",
+      "status": "existing",
+      "description": "Envoi de messages multi-canal"
+    },
+    {
+      "id": "WF-SALES-QUALIFY",
+      "name": "Qualification leads",
+      "trigger": "workflow_call",
+      "description": "Qualification automatique des leads entrants"
+    },
+    {
+      "id": "WF-SALES-FOLLOWUP",
+      "name": "Follow-up automatique",
+      "trigger": "cron",
+      "schedule": "0 9,14 * * 1-5",
+      "description": "Sequences de suivi 2x par jour en semaine"
+    },
+    {
+      "id": "WF-SALES-PROPOSAL",
+      "name": "Propositions commerciales",
+      "trigger": "workflow_call",
+      "description": "Generation de propositions personnalisees"
+    },
+    {
+      "id": "WF-SALES-PIPELINE",
+      "name": "Pipeline management",
+      "trigger": "cron",
+      "schedule": "0 8 * * *",
+      "description": "Mise a jour quotidienne du pipeline"
+    }
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "lead": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "source": { "type": "string" },
+          "interest": { "type": "string" },
+          "budget_range": { "type": "string" }
+        }
+      },
+      "conversation_history": { "type": "array" },
+      "pipeline_stage": { "type": "string", "enum": ["new", "contacted", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"] }
+    },
+    "required": ["lead"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "lead_score": { "type": "number" },
+      "qualification": { "type": "string", "enum": ["hot", "warm", "cold"] },
+      "next_action": { "type": "string" },
+      "proposal": { "type": "object" },
+      "follow_up_message": { "type": "string" },
+      "follow_up_date": { "type": "string" }
+    }
+  },
+
+  "dependencies": ["community-manager", "media-buyer", "email-marketer"],
+  "feeds_into": ["crm-manager", "onboarding-specialist"]
+}

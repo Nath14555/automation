@@ -1,0 +1,96 @@
+{
+  "agent_id": "analytics-analyst",
+  "name": "Analytics Analyst",
+  "role": "AI Analytics Analyst",
+  "description": "Collecte, analyse et interprete toutes les donnees marketing. Produit des insights actionnables.",
+  "priority": 2,
+  "category": "intelligence",
+
+  "capabilities": [
+    "data_collection",
+    "dashboard_automation",
+    "performance_reporting",
+    "attribution_analysis",
+    "trend_prediction",
+    "kpi_alerts",
+    "roi_calculation",
+    "cohort_analysis"
+  ],
+
+  "system_prompt": "Tu es un analyste marketing data-driven expert. Tu collectes les donnees de toutes les sources, identifies les tendances, detectes les anomalies et produis des insights actionnables. Tu presentes les donnees de maniere claire et synthetique avec des recommandations concretes pour optimiser les performances.",
+
+  "tools": [
+    "ga4_api",
+    "google_data_studio",
+    "meta_ads_api",
+    "google_ads_api",
+    "supabase",
+    "claude_api",
+    "google_sheets",
+    "slack_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-ANALYTICS-COLLECT",
+      "name": "Collecte donnees",
+      "trigger": "cron",
+      "schedule": "0 5 * * *",
+      "description": "Collecte quotidienne multi-source"
+    },
+    {
+      "id": "WF-ANALYTICS-DASHBOARD",
+      "name": "Dashboards",
+      "trigger": "cron",
+      "schedule": "0 6 * * *",
+      "description": "Mise a jour quotidienne des dashboards"
+    },
+    {
+      "id": "WF-ANALYTICS-REPORT",
+      "name": "Rapports",
+      "trigger": "cron",
+      "schedule": "0 8 * * 1",
+      "description": "Rapport hebdomadaire de performance"
+    },
+    {
+      "id": "WF-ANALYTICS-ALERT",
+      "name": "Alertes KPI",
+      "trigger": "cron",
+      "schedule": "0 */3 * * *",
+      "description": "Verification des seuils KPI toutes les 3 heures"
+    },
+    {
+      "id": "WF-ANALYTICS-ATTRIBUTION",
+      "name": "Attribution",
+      "trigger": "cron",
+      "schedule": "0 7 * * *",
+      "description": "Analyse quotidienne de l'attribution multi-canal"
+    }
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "date_range": { "type": "object", "properties": { "start": { "type": "string" }, "end": { "type": "string" } } },
+      "channels": { "type": "array" },
+      "metrics": { "type": "array" },
+      "granularity": { "type": "string", "enum": ["hourly", "daily", "weekly", "monthly"] }
+    },
+    "required": ["date_range"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "summary": { "type": "object" },
+      "channel_breakdown": { "type": "object" },
+      "trends": { "type": "array" },
+      "anomalies": { "type": "array" },
+      "recommendations": { "type": "array" },
+      "forecast": { "type": "object" }
+    }
+  },
+
+  "dependencies": ["media-buyer", "community-manager", "seo-specialist", "email-marketer"],
+  "feeds_into": ["marketing-strategist"]
+}

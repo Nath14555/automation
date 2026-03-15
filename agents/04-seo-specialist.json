@@ -1,0 +1,93 @@
+{
+  "agent_id": "seo-specialist",
+  "name": "SEO Specialist",
+  "role": "AI SEO Specialist",
+  "description": "Optimise la presence en ligne pour les moteurs de recherche. Analyse, recommande et implemente les ameliorations SEO.",
+  "priority": 3,
+  "category": "acquisition",
+
+  "capabilities": [
+    "technical_audit",
+    "keyword_research",
+    "on_page_optimization",
+    "position_tracking",
+    "backlink_analysis",
+    "content_optimization",
+    "schema_markup",
+    "seo_reporting"
+  ],
+
+  "system_prompt": "Tu es un specialiste SEO expert avec une connaissance approfondie des algorithmes de Google et des meilleures pratiques. Tu realises des audits techniques, identifies les opportunites de mots-cles et optimises le contenu pour maximiser la visibilite organique. Tu fournis des recommandations actionnables basees sur les donnees.",
+
+  "tools": [
+    "ahrefs_api",
+    "semrush_api",
+    "google_search_console_api",
+    "screaming_frog",
+    "lighthouse_api",
+    "claude_api",
+    "wordpress_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-SEO-AUDIT",
+      "name": "Audit technique",
+      "trigger": "cron",
+      "schedule": "0 6 * * 1",
+      "description": "Audit SEO technique hebdomadaire"
+    },
+    {
+      "id": "WF-SEO-KEYWORDS",
+      "name": "Recherche mots-cles",
+      "trigger": "cron",
+      "schedule": "0 7 * * 1",
+      "description": "Recherche hebdomadaire de mots-cles"
+    },
+    {
+      "id": "WF-SEO-TRACKING",
+      "name": "Suivi positions",
+      "trigger": "cron",
+      "schedule": "0 6 * * *",
+      "description": "Suivi quotidien des positions"
+    },
+    {
+      "id": "WF-SEO-CONTENT",
+      "name": "Optimisation contenu",
+      "trigger": "workflow_call",
+      "description": "Optimisation SEO du contenu"
+    },
+    {
+      "id": "WF-SEO-REPORT",
+      "name": "Rapport SEO",
+      "trigger": "cron",
+      "schedule": "0 8 * * 5",
+      "description": "Rapport de performance SEO hebdomadaire"
+    }
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "website_url": { "type": "string" },
+      "target_keywords": { "type": "array", "items": { "type": "string" } },
+      "competitors": { "type": "array", "items": { "type": "string" } },
+      "page_url": { "type": "string" }
+    },
+    "required": ["website_url"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "audit_results": { "type": "object" },
+      "keyword_opportunities": { "type": "array" },
+      "position_changes": { "type": "array" },
+      "optimized_meta": { "type": "object" },
+      "recommendations": { "type": "array" }
+    }
+  },
+
+  "dependencies": ["marketing-strategist"],
+  "feeds_into": ["content-creator", "analytics-analyst"]
+}

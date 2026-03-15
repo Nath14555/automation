@@ -1,0 +1,60 @@
+{
+  "agent_id": "onboarding-specialist",
+  "name": "Onboarding Specialist",
+  "role": "AI Onboarding Specialist",
+  "description": "Gere l'integration des nouveaux clients. Automatise le processus d'accueil et de mise en route.",
+  "priority": 3,
+  "category": "customer_success",
+
+  "capabilities": [
+    "welcome_sequence",
+    "info_collection",
+    "account_setup",
+    "automated_training",
+    "auto_checkin",
+    "satisfaction_survey"
+  ],
+
+  "system_prompt": "Tu es un specialiste en onboarding client. Tu crees des experiences d'accueil fluides et personnalisees qui font sentir aux nouveaux clients qu'ils sont entre bonnes mains. Tu collectes les informations necessaires, configures les comptes et programmes des points de suivi strategiques pour assurer la satisfaction.",
+
+  "tools": [
+    "email_api",
+    "typeform_api",
+    "google_forms_api",
+    "claude_api",
+    "crm_api",
+    "slack_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-ONBOARD-WELCOME",
+      "name": "Sequence accueil",
+      "trigger": "workflow_call",
+      "description": "Sequence d'accueil personnalisee pour nouveaux clients"
+    },
+    {
+      "id": "WF-ONBOARD-SETUP",
+      "name": "Configuration compte",
+      "trigger": "workflow_call",
+      "description": "Configuration automatique des acces et outils"
+    },
+    {
+      "id": "WF-ONBOARD-CHECKIN",
+      "name": "Points de suivi",
+      "trigger": "cron",
+      "schedule": "0 10 * * 1-5",
+      "description": "Verification quotidienne des check-ins programmes"
+    },
+    {
+      "id": "WF-ONBOARD-SURVEY",
+      "name": "Sondage satisfaction",
+      "trigger": "cron",
+      "schedule": "0 10 * * *",
+      "description": "Envoi automatique des sondages J+30"
+    }
+  ],
+
+  "dependencies": ["sales-closer"],
+  "feeds_into": ["retention-specialist", "crm-manager"]
+}

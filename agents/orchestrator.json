@@ -1,0 +1,146 @@
+{
+  "orchestrator": {
+    "name": "AI Marketing Agency Orchestrator",
+    "version": "1.0.0",
+    "description": "Orchestrateur central qui coordonne les 12 agents AI de l'agence de marketing",
+
+    "agents": [
+      {
+        "id": "marketing-strategist",
+        "file": "01-marketing-strategist.json",
+        "category": "strategy",
+        "priority": 1,
+        "always_on": true
+      },
+      {
+        "id": "content-creator",
+        "file": "02-content-creator.json",
+        "category": "content",
+        "priority": 2,
+        "always_on": true
+      },
+      {
+        "id": "community-manager",
+        "file": "03-community-manager.json",
+        "category": "engagement",
+        "priority": 2,
+        "always_on": true
+      },
+      {
+        "id": "seo-specialist",
+        "file": "04-seo-specialist.json",
+        "category": "acquisition",
+        "priority": 3,
+        "always_on": false
+      },
+      {
+        "id": "media-buyer",
+        "file": "05-media-buyer.json",
+        "category": "acquisition",
+        "priority": 2,
+        "always_on": true
+      },
+      {
+        "id": "email-marketer",
+        "file": "06-email-marketer.json",
+        "category": "nurturing",
+        "priority": 3,
+        "always_on": true
+      },
+      {
+        "id": "sales-closer",
+        "file": "07-sales-closer.json",
+        "category": "conversion",
+        "priority": 1,
+        "always_on": true
+      },
+      {
+        "id": "analytics-analyst",
+        "file": "08-analytics-analyst.json",
+        "category": "intelligence",
+        "priority": 2,
+        "always_on": true
+      },
+      {
+        "id": "crm-manager",
+        "file": "09-crm-manager.json",
+        "category": "operations",
+        "priority": 3,
+        "always_on": true
+      },
+      {
+        "id": "reputation-manager",
+        "file": "10-reputation-manager.json",
+        "category": "brand",
+        "priority": 3,
+        "always_on": false
+      },
+      {
+        "id": "onboarding-specialist",
+        "file": "11-onboarding-specialist.json",
+        "category": "customer_success",
+        "priority": 3,
+        "always_on": false
+      },
+      {
+        "id": "retention-specialist",
+        "file": "12-retention-specialist.json",
+        "category": "customer_success",
+        "priority": 2,
+        "always_on": true
+      }
+    ],
+
+    "data_flow": {
+      "acquisition_funnel": [
+        "marketing-strategist -> content-creator -> community-manager -> sales-closer",
+        "marketing-strategist -> media-buyer -> sales-closer",
+        "marketing-strategist -> seo-specialist -> content-creator",
+        "marketing-strategist -> email-marketer -> sales-closer"
+      ],
+      "conversion_funnel": [
+        "sales-closer -> crm-manager -> onboarding-specialist -> retention-specialist"
+      ],
+      "feedback_loop": [
+        "analytics-analyst -> marketing-strategist",
+        "retention-specialist -> marketing-strategist",
+        "reputation-manager -> marketing-strategist"
+      ]
+    },
+
+    "execution_order": {
+      "daily": [
+        { "time": "04:00", "agent": "crm-manager", "workflow": "WF-CRM-DEDUPE" },
+        { "time": "05:00", "agent": "analytics-analyst", "workflow": "WF-ANALYTICS-COLLECT" },
+        { "time": "06:00", "agent": "seo-specialist", "workflow": "WF-SEO-TRACKING" },
+        { "time": "06:00", "agent": "analytics-analyst", "workflow": "WF-ANALYTICS-DASHBOARD" },
+        { "time": "06:00", "agent": "email-marketer", "workflow": "WF-EMAIL-SEGMENT" },
+        { "time": "07:00", "agent": "content-creator", "workflow": "WF-CONTENT-SOCIAL" },
+        { "time": "07:00", "agent": "analytics-analyst", "workflow": "WF-ANALYTICS-ATTRIBUTION" },
+        { "time": "07:00", "agent": "reputation-manager", "workflow": "WF-REPUTATION-SENTIMENT" },
+        { "time": "07:00", "agent": "retention-specialist", "workflow": "WF-RETAIN-CHURN" },
+        { "time": "08:00", "agent": "media-buyer", "workflow": "WF-ADS-BUDGET" },
+        { "time": "09:00", "agent": "media-buyer", "workflow": "WF-ADS-REPORT" },
+        { "time": "09:00", "agent": "sales-closer", "workflow": "WF-SALES-FOLLOWUP" },
+        { "time": "10:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE" },
+        { "time": "14:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE" },
+        { "time": "14:00", "agent": "sales-closer", "workflow": "WF-SALES-FOLLOWUP" },
+        { "time": "18:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE" }
+      ],
+      "realtime": [
+        "community-manager: WF-INGEST-META, WF-INGEST-TIKTOK, WF-INGEST-GMAIL",
+        "community-manager: WF-COMMUNITY-COMMENTS, WF-COMMUNITY-MODERATE",
+        "reputation-manager: WF-REPUTATION-REVIEW",
+        "sales-closer: WF-SALES-QUALIFY",
+        "crm-manager: WF-CRM-ENRICH, WF-CRM-SCORE"
+      ]
+    },
+
+    "notification_channels": {
+      "alerts": "slack:#marketing-alerts",
+      "reports": "slack:#marketing-reports",
+      "crises": "slack:#marketing-urgent",
+      "sales": "slack:#sales-pipeline"
+    }
+  }
+}

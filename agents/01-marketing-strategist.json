@@ -1,0 +1,84 @@
+{
+  "agent_id": "marketing-strategist",
+  "name": "Stratege Marketing",
+  "role": "AI Marketing Strategist",
+  "description": "Cerveau strategique de l'agence. Analyse le marche, definit les objectifs et coordonne les autres agents.",
+  "priority": 1,
+  "category": "strategy",
+
+  "capabilities": [
+    "competitive_analysis",
+    "trend_research",
+    "persona_definition",
+    "campaign_planning",
+    "creative_briefing",
+    "strategic_reporting"
+  ],
+
+  "system_prompt": "Tu es un stratege marketing senior avec 15 ans d'experience. Tu analyses les donnees du marche, identifies les opportunites et crees des plans de campagne detailles. Tu communiques de maniere structuree avec des KPIs mesurables. Tu coordonnes les autres agents en produisant des briefs clairs et actionnables.",
+
+  "tools": [
+    "web_scraper",
+    "google_trends_api",
+    "social_listening",
+    "google_sheets",
+    "notion_api",
+    "claude_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-STRATEGY-TRENDS",
+      "name": "Veille tendances",
+      "trigger": "cron",
+      "schedule": "0 8 * * 1",
+      "description": "Analyse hebdomadaire des tendances du marche"
+    },
+    {
+      "id": "WF-STRATEGY-COMPETITOR",
+      "name": "Analyse concurrentielle",
+      "trigger": "cron",
+      "schedule": "0 9 * * 1",
+      "description": "Rapport hebdomadaire sur les concurrents"
+    },
+    {
+      "id": "WF-STRATEGY-BRIEF",
+      "name": "Generation de briefs",
+      "trigger": "manual",
+      "description": "Creation de briefs creatifs pour les campagnes"
+    }
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "market_data": { "type": "string", "description": "Donnees marche/industrie" },
+      "competitor_urls": { "type": "array", "items": { "type": "string" } },
+      "business_goals": { "type": "string" },
+      "budget": { "type": "number" },
+      "target_audience": { "type": "string" }
+    },
+    "required": ["business_goals"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "campaign_plan": {
+        "type": "object",
+        "properties": {
+          "objectives": { "type": "array" },
+          "channels": { "type": "array" },
+          "budget_allocation": { "type": "object" },
+          "timeline": { "type": "object" },
+          "kpis": { "type": "object" }
+        }
+      },
+      "creative_brief": { "type": "object" },
+      "competitor_analysis": { "type": "object" }
+    }
+  },
+
+  "dependencies": [],
+  "feeds_into": ["content-creator", "media-buyer", "seo-specialist", "email-marketer"]
+}

@@ -1,0 +1,95 @@
+{
+  "agent_id": "content-creator",
+  "name": "Content Creator",
+  "role": "AI Content Creator",
+  "description": "Cree tout le contenu textuel et visuel. Redige, adapte et optimise le contenu pour chaque canal.",
+  "priority": 2,
+  "category": "content",
+
+  "capabilities": [
+    "social_media_posts",
+    "blog_articles",
+    "video_scripts",
+    "captions",
+    "visual_generation",
+    "multi_platform_adaptation",
+    "editorial_calendar",
+    "ab_copy_variants"
+  ],
+
+  "system_prompt": "Tu es un createur de contenu expert avec une maitrise parfaite du copywriting, du storytelling et des codes de chaque plateforme sociale. Tu adaptes le ton, le format et le style selon la plateforme cible. Tu generes du contenu engageant qui respecte la voix de la marque et les objectifs de la campagne.",
+
+  "tools": [
+    "claude_api",
+    "dalle_api",
+    "canva_api",
+    "buffer_api",
+    "wordpress_api",
+    "google_sheets",
+    "notion_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-CONTENT-SOCIAL",
+      "name": "Posts reseaux sociaux",
+      "trigger": "cron",
+      "schedule": "0 7 * * *",
+      "description": "Generation et publication quotidienne de posts"
+    },
+    {
+      "id": "WF-CONTENT-BLOG",
+      "name": "Articles de blog",
+      "trigger": "cron",
+      "schedule": "0 8 * * 1",
+      "description": "Creation hebdomadaire d'articles SEO"
+    },
+    {
+      "id": "WF-CONTENT-VIDEO-SCRIPT",
+      "name": "Scripts video",
+      "trigger": "manual",
+      "description": "Generation de scripts pour Reels/TikTok/YouTube"
+    },
+    {
+      "id": "WF-CONTENT-VISUAL",
+      "name": "Generation visuels",
+      "trigger": "workflow_call",
+      "description": "Creation de visuels avec IA generative"
+    },
+    {
+      "id": "WF-CONTENT-CALENDAR",
+      "name": "Calendrier editorial",
+      "trigger": "cron",
+      "schedule": "0 9 * * 5",
+      "description": "Planification hebdomadaire du contenu"
+    }
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "brief": { "type": "string", "description": "Brief creatif du stratege" },
+      "brand_voice": { "type": "string", "description": "Ton et style de la marque" },
+      "platform": { "type": "string", "enum": ["meta", "tiktok", "linkedin", "blog", "youtube"] },
+      "content_type": { "type": "string", "enum": ["post", "article", "script", "caption", "visual"] },
+      "keywords": { "type": "array", "items": { "type": "string" } },
+      "visual_style": { "type": "string" }
+    },
+    "required": ["brief", "platform", "content_type"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "content": { "type": "string" },
+      "variants": { "type": "array" },
+      "hashtags": { "type": "array" },
+      "visual_prompt": { "type": "string" },
+      "visual_url": { "type": "string" },
+      "scheduled_at": { "type": "string", "format": "date-time" }
+    }
+  },
+
+  "dependencies": ["marketing-strategist"],
+  "feeds_into": ["community-manager", "media-buyer", "email-marketer"]
+}

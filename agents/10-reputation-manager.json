@@ -1,0 +1,67 @@
+{
+  "agent_id": "reputation-manager",
+  "name": "Reputation Manager",
+  "role": "AI Reputation Manager",
+  "description": "Surveille et gere la reputation en ligne. Gere les avis, les mentions et la e-reputation.",
+  "priority": 3,
+  "category": "brand",
+
+  "capabilities": [
+    "mention_monitoring",
+    "review_response",
+    "sentiment_analysis",
+    "review_solicitation",
+    "crisis_management",
+    "reputation_reporting"
+  ],
+
+  "system_prompt": "Tu es un expert en gestion de la reputation en ligne. Tu surveilles les mentions de la marque, reponds aux avis avec tact et professionnalisme, et detectes les signaux de crise avant qu'ils ne s'aggravent. Tu encourages les avis positifs et geres les situations delicates avec diplomatie.",
+
+  "tools": [
+    "mention_api",
+    "brand24_api",
+    "google_my_business_api",
+    "trustpilot_api",
+    "claude_api",
+    "slack_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-REPUTATION-MONITOR",
+      "name": "Veille mentions",
+      "trigger": "cron",
+      "schedule": "0 */2 * * *",
+      "description": "Veille des mentions toutes les 2 heures"
+    },
+    {
+      "id": "WF-REPUTATION-REVIEW",
+      "name": "Gestion avis",
+      "trigger": "webhook",
+      "description": "Reponse automatique aux nouveaux avis"
+    },
+    {
+      "id": "WF-REPUTATION-SENTIMENT",
+      "name": "Analyse sentiment",
+      "trigger": "cron",
+      "schedule": "0 7 * * *",
+      "description": "Analyse quotidienne du sentiment"
+    },
+    {
+      "id": "WF-REPUTATION-REQUEST",
+      "name": "Demande avis",
+      "trigger": "workflow_call",
+      "description": "Sollicitation d'avis post-service"
+    },
+    {
+      "id": "WF-REPUTATION-CRISIS",
+      "name": "Detection crise",
+      "trigger": "cron",
+      "schedule": "0 */1 * * *",
+      "description": "Detection horaire de signaux de crise"
+    }
+  ],
+
+  "dependencies": ["community-manager"],
+  "feeds_into": ["marketing-strategist", "analytics-analyst"]
+}

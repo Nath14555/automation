@@ -1,0 +1,111 @@
+{
+  "agent_id": "community-manager",
+  "name": "Community Manager",
+  "role": "AI Community Manager",
+  "description": "Gere les interactions sur les reseaux sociaux. Repond aux commentaires, DMs, et maintient l'engagement.",
+  "priority": 2,
+  "category": "engagement",
+
+  "capabilities": [
+    "dm_response",
+    "comment_response",
+    "moderation",
+    "proactive_engagement",
+    "crisis_detection",
+    "engagement_reporting",
+    "scheduled_publishing"
+  ],
+
+  "system_prompt": "Tu es un community manager expert qui maitrise la communication sur les reseaux sociaux. Tu reponds de maniere naturelle, engageante et alignee avec la voix de la marque. Tu detectes les situations sensibles et sais quand escalader a un humain. Tu favorises l'engagement positif tout en moderant les contenus inappropries.",
+
+  "tools": [
+    "meta_api",
+    "tiktok_api",
+    "youtube_api",
+    "linkedin_api",
+    "claude_api",
+    "buffer_api",
+    "slack_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-INGEST-META",
+      "name": "Ingestion Meta",
+      "trigger": "webhook",
+      "status": "existing",
+      "description": "Reception des messages Meta (Facebook/Instagram)"
+    },
+    {
+      "id": "WF-INGEST-TIKTOK",
+      "name": "Ingestion TikTok",
+      "trigger": "webhook",
+      "status": "existing",
+      "description": "Reception des messages TikTok"
+    },
+    {
+      "id": "WF-INGEST-GMAIL",
+      "name": "Ingestion Gmail",
+      "trigger": "gmail_trigger",
+      "status": "existing",
+      "description": "Reception des emails"
+    },
+    {
+      "id": "WF-CORE-BRAIN",
+      "name": "Cerveau central",
+      "trigger": "workflow_call",
+      "status": "existing",
+      "description": "Logique de decision centrale"
+    },
+    {
+      "id": "WF-COMMUNITY-COMMENTS",
+      "name": "Gestion commentaires",
+      "trigger": "webhook",
+      "description": "Reponse automatique aux commentaires"
+    },
+    {
+      "id": "WF-COMMUNITY-ENGAGE",
+      "name": "Engagement proactif",
+      "trigger": "cron",
+      "schedule": "0 10,14,18 * * *",
+      "description": "Engagement proactif 3x par jour"
+    },
+    {
+      "id": "WF-COMMUNITY-MODERATE",
+      "name": "Moderation",
+      "trigger": "webhook",
+      "description": "Filtrage automatique des contenus"
+    },
+    {
+      "id": "WF-COMMUNITY-PUBLISH",
+      "name": "Publication programmee",
+      "trigger": "cron",
+      "description": "Publication selon le calendrier editorial"
+    }
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "source": { "type": "string", "enum": ["meta", "tiktok", "gmail", "linkedin", "youtube"] },
+      "interaction_type": { "type": "string", "enum": ["dm", "comment", "mention", "review"] },
+      "content": { "type": "string" },
+      "sender_info": { "type": "object" },
+      "conversation_history": { "type": "array" }
+    },
+    "required": ["source", "interaction_type", "content"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "reply": { "type": "string" },
+      "action": { "type": "string", "enum": ["reply", "escalate", "moderate", "ignore"] },
+      "sentiment_score": { "type": "number" },
+      "escalation_reason": { "type": "string" }
+    }
+  },
+
+  "dependencies": ["content-creator"],
+  "feeds_into": ["sales-closer", "reputation-manager", "analytics-analyst"]
+}

@@ -1,0 +1,93 @@
+{
+  "agent_id": "media-buyer",
+  "name": "Media Buyer",
+  "role": "AI Media Buyer",
+  "description": "Gere les campagnes publicitaires payantes. Optimise les budgets, cree les audiences et ajuste les encheres.",
+  "priority": 2,
+  "category": "acquisition",
+
+  "capabilities": [
+    "campaign_creation",
+    "bid_optimization",
+    "audience_management",
+    "budget_allocation",
+    "ab_testing",
+    "anomaly_detection",
+    "ad_reporting",
+    "retargeting"
+  ],
+
+  "system_prompt": "Tu es un media buyer expert specialise dans la publicite digitale. Tu geres les campagnes sur Meta Ads, Google Ads et TikTok Ads. Tu optimises les encheres, les audiences et les budgets pour maximiser le ROAS. Tu detectes rapidement les anomalies de performance et reagis en consequence.",
+
+  "tools": [
+    "meta_ads_api",
+    "google_ads_api",
+    "tiktok_ads_api",
+    "claude_api",
+    "google_sheets",
+    "slack_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-ADS-CREATE",
+      "name": "Creation campagnes",
+      "trigger": "manual",
+      "description": "Configuration de nouvelles campagnes publicitaires"
+    },
+    {
+      "id": "WF-ADS-OPTIMIZE",
+      "name": "Optimisation auto",
+      "trigger": "cron",
+      "schedule": "0 */4 * * *",
+      "description": "Optimisation des encheres toutes les 4 heures"
+    },
+    {
+      "id": "WF-ADS-BUDGET",
+      "name": "Gestion budget",
+      "trigger": "cron",
+      "schedule": "0 8 * * *",
+      "description": "Reallocation quotidienne du budget"
+    },
+    {
+      "id": "WF-ADS-REPORT",
+      "name": "Rapport publicitaire",
+      "trigger": "cron",
+      "schedule": "0 9 * * *",
+      "description": "Rapport quotidien de performance ads"
+    },
+    {
+      "id": "WF-ADS-ALERT",
+      "name": "Alertes performance",
+      "trigger": "cron",
+      "schedule": "0 */2 * * *",
+      "description": "Detection d'anomalies toutes les 2 heures"
+    }
+  ],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "campaign_brief": { "type": "string" },
+      "budget": { "type": "number" },
+      "platforms": { "type": "array", "items": { "type": "string" } },
+      "audience_criteria": { "type": "object" },
+      "creatives": { "type": "array" },
+      "duration": { "type": "string" }
+    },
+    "required": ["campaign_brief", "budget", "platforms"]
+  },
+
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "campaign_ids": { "type": "object" },
+      "performance": { "type": "object" },
+      "optimizations_applied": { "type": "array" },
+      "alerts": { "type": "array" }
+    }
+  },
+
+  "dependencies": ["marketing-strategist", "content-creator"],
+  "feeds_into": ["analytics-analyst", "sales-closer"]
+}

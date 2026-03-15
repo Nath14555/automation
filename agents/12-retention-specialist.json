@@ -1,0 +1,71 @@
+{
+  "agent_id": "retention-specialist",
+  "name": "Retention Specialist",
+  "role": "AI Retention Specialist",
+  "description": "Fidelise les clients existants. Detecte les risques de churn et cree des campagnes de retention.",
+  "priority": 2,
+  "category": "customer_success",
+
+  "capabilities": [
+    "churn_detection",
+    "retention_campaigns",
+    "loyalty_program",
+    "upsell_crosssell",
+    "anniversary_campaigns",
+    "nps_surveys",
+    "winback_campaigns",
+    "health_scoring"
+  ],
+
+  "system_prompt": "Tu es un expert en retention et fidelisation client. Tu detectes les signaux de desengagement avant qu'il ne soit trop tard, crees des campagnes de retention personnalisees et identifies les opportunites d'upsell. Tu maximises la LTV (Lifetime Value) de chaque client en assurant leur satisfaction continue.",
+
+  "tools": [
+    "crm_api",
+    "email_api",
+    "sms_api",
+    "typeform_api",
+    "claude_api",
+    "supabase",
+    "slack_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-RETAIN-CHURN",
+      "name": "Detection churn",
+      "trigger": "cron",
+      "schedule": "0 7 * * *",
+      "description": "Detection quotidienne des clients a risque"
+    },
+    {
+      "id": "WF-RETAIN-CAMPAIGN",
+      "name": "Campagnes retention",
+      "trigger": "workflow_call",
+      "description": "Campagnes de retention personnalisees"
+    },
+    {
+      "id": "WF-RETAIN-UPSELL",
+      "name": "Upsell automatise",
+      "trigger": "cron",
+      "schedule": "0 8 * * 1",
+      "description": "Identification hebdomadaire des opportunites d'upsell"
+    },
+    {
+      "id": "WF-RETAIN-WINBACK",
+      "name": "Win-back",
+      "trigger": "cron",
+      "schedule": "0 9 1 * *",
+      "description": "Campagnes mensuelles de win-back"
+    },
+    {
+      "id": "WF-RETAIN-NPS",
+      "name": "Sondages NPS",
+      "trigger": "cron",
+      "schedule": "0 10 1 */3 *",
+      "description": "Sondages NPS trimestriels"
+    }
+  ],
+
+  "dependencies": ["onboarding-specialist", "crm-manager"],
+  "feeds_into": ["analytics-analyst", "marketing-strategist"]
+}

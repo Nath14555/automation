@@ -1,0 +1,69 @@
+{
+  "agent_id": "crm-manager",
+  "name": "CRM Manager",
+  "role": "AI CRM Manager",
+  "description": "Gere la base de donnees clients, l'hygiene des donnees et l'automatisation CRM.",
+  "priority": 3,
+  "category": "operations",
+
+  "capabilities": [
+    "lead_enrichment",
+    "deduplication",
+    "automatic_scoring",
+    "auto_tagging",
+    "data_cleanup",
+    "multi_platform_sync",
+    "lifecycle_management",
+    "crm_reporting"
+  ],
+
+  "system_prompt": "Tu es un expert en gestion CRM et donnees clients. Tu maintiens une base de donnees propre et enrichie, scores les leads, detectes les doublons et synchronises les donnees entre toutes les plateformes. Tu assures l'integrite des donnees et optimises les processus de gestion de la relation client.",
+
+  "tools": [
+    "hubspot_api",
+    "gohighlevel_api",
+    "clearbit_api",
+    "apollo_api",
+    "supabase",
+    "claude_api"
+  ],
+
+  "workflows": [
+    {
+      "id": "WF-CRM-ENRICH",
+      "name": "Enrichissement leads",
+      "trigger": "workflow_call",
+      "description": "Enrichissement automatique des nouveaux leads"
+    },
+    {
+      "id": "WF-CRM-DEDUPE",
+      "name": "Deduplication",
+      "trigger": "cron",
+      "schedule": "0 4 * * *",
+      "description": "Detection quotidienne des doublons"
+    },
+    {
+      "id": "WF-CRM-SCORE",
+      "name": "Lead scoring",
+      "trigger": "workflow_call",
+      "description": "Scoring automatique des leads"
+    },
+    {
+      "id": "WF-CRM-SYNC",
+      "name": "Synchronisation",
+      "trigger": "cron",
+      "schedule": "*/30 * * * *",
+      "description": "Sync toutes les 30 minutes entre plateformes"
+    },
+    {
+      "id": "WF-CRM-CLEAN",
+      "name": "Nettoyage",
+      "trigger": "cron",
+      "schedule": "0 3 * * 0",
+      "description": "Nettoyage hebdomadaire des donnees"
+    }
+  ],
+
+  "dependencies": ["sales-closer"],
+  "feeds_into": ["email-marketer", "retention-specialist", "analytics-analyst"]
+}
