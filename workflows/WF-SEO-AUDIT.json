@@ -1,0 +1,182 @@
+{
+  "name": "WF-SEO-AUDIT",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "triggerAtHour": 6, "triggerAtDay": 1 }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Monday 6AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const siteUrl = $env.WEBSITE_URL || 'https://example.com';\nconst pagesToAudit = ($env.SEO_AUDIT_PAGES || '').split(',').filter(Boolean);\n\n// If no specific pages, audit homepage + key pages\nconst pages = pagesToAudit.length > 0 ? pagesToAudit : [\n  siteUrl,\n  `${siteUrl}/services`,\n  `${siteUrl}/blog`,\n  `${siteUrl}/contact`\n];\n\nreturn { json: { site_url: siteUrl, pages } };"
+      },
+      "id": "config-pages",
+      "name": "Configure Pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={{ encodeURIComponent($json.pages[0]) }}&category=seo&category=performance&category=accessibility&key={{ $env.GOOGLE_PAGESPEED_KEY }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "pagespeed-home",
+      "name": "PageSpeed Home",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?engine=google&q=site:{{ encodeURIComponent($json.site_url.replace('https://', '').replace('http://', '')) }}&api_key={{ $env.SERPAPI_KEY }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "check-indexed",
+      "name": "Check Indexed Pages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const pageSpeed = $('PageSpeed Home').item.json;\nconst indexedPages = $('Check Indexed Pages').item.json;\nconst config = $('Configure Pages').item.json;\n\n// Extract Lighthouse scores\nconst lighthouse = pageSpeed?.lighthouseResult;\nconst categories = lighthouse?.categories || {};\n\nconst auditData = {\n  site_url: config.site_url,\n  audit_date: new Date().toISOString(),\n  scores: {\n    performance: Math.round((categories.performance?.score || 0) * 100),\n    seo: Math.round((categories.seo?.score || 0) * 100),\n    accessibility: Math.round((categories.accessibility?.score || 0) * 100)\n  },\n  page_load_time: lighthouse?.audits?.['speed-index']?.numericValue || 0,\n  indexed_pages: indexedPages?.search_information?.total_results || 0,\n  top_indexed: (indexedPages?.organic_results || []).slice(0, 10).map(r => ({\n    title: r.title,\n    url: r.link,\n    position: r.position\n  })),\n  critical_issues: [],\n  warnings: []\n};\n\n// Check for critical issues\nif (auditData.scores.seo < 80) auditData.critical_issues.push('Score SEO < 80');\nif (auditData.scores.performance < 50) auditData.critical_issues.push('Performance critique < 50');\nif (auditData.page_load_time > 5000) auditData.critical_issues.push('Temps de chargement > 5s');\n\n// Extract specific audit failures\nconst audits = lighthouse?.audits || {};\nfor (const [key, audit] of Object.entries(audits)) {\n  if (audit.score === 0 && audit.title) {\n    auditData.critical_issues.push(audit.title);\n  } else if (audit.score !== null && audit.score < 0.5 && audit.title) {\n    auditData.warnings.push(audit.title);\n  }\n}\n\nreturn { json: auditData };"
+      },
+      "id": "process-audit",
+      "name": "Process Audit Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un specialiste SEO technique. Analyse les resultats de l'audit et produis un rapport JSON avec:\n\n- overall_score: score global sur 100\n- grade: A/B/C/D/F\n- critical_fixes: corrections critiques a faire immediatement (tableau)\n- improvements: ameliorations recommandees par priorite (tableau)\n- technical_issues: problemes techniques identifies (tableau)\n- on_page_recommendations: recommandations on-page (tableau)\n- mobile_readiness: score mobile et recommandations\n- action_plan: plan d'action prioritise pour la semaine\n\nChaque element doit avoir: title, description, priority (critical/high/medium/low), estimated_impact (high/medium/low)"
+            },
+            {
+              "role": "user",
+              "content": "=Resultats de l'audit SEO:\n{{ JSON.stringify($json) }}\n\nGenere le rapport d'audit complet:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "ai-analyze",
+      "name": "AI SEO Analysis",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1120, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const auditData = $('Process Audit Data').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet report;\ntry { report = JSON.parse(aiResponse); } catch (e) { report = { error: 'Parse failed' }; }\n\nreturn {\n  json: {\n    report_type: 'seo_audit',\n    generated_at: new Date().toISOString(),\n    agent_id: 'seo-specialist',\n    workflow_id: 'WF-SEO-AUDIT',\n    raw_scores: auditData.scores,\n    indexed_pages: auditData.indexed_pages,\n    report\n  }\n};"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "seo-specialist" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-SEO-AUDIT" },
+            { "fieldName": "action", "fieldValue": "seo_audit" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-reports",
+        "text": "=:mag_right: *Audit SEO Hebdomadaire*\n\n*Scores:*\n- SEO: {{ $json.raw_scores.seo }}/100\n- Performance: {{ $json.raw_scores.performance }}/100\n- Accessibilite: {{ $json.raw_scores.accessibility }}/100\n\n*Note globale:* {{ $json.report.grade || 'N/A' }} ({{ $json.report.overall_score || 'N/A' }}/100)\n*Pages indexees:* {{ $json.indexed_pages }}\n\n*Corrections critiques:*\n{{ $json.report.critical_fixes?.slice(0, 3).map((f, i) => `${i+1}. ${f.title}`).join('\\n') || 'Aucune' }}\n\n_Genere par AI SEO Specialist_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1780, 300],
+      "credentials": {
+        "slackApi": { "id": "slack-credentials", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Monday 6AM": {
+      "main": [[{ "node": "Configure Pages", "type": "main", "index": 0 }]]
+    },
+    "Configure Pages": {
+      "main": [
+        [
+          { "node": "PageSpeed Home", "type": "main", "index": 0 },
+          { "node": "Check Indexed Pages", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "PageSpeed Home": {
+      "main": [[{ "node": "Process Audit Data", "type": "main", "index": 0 }]]
+    },
+    "Check Indexed Pages": {
+      "main": [[{ "node": "Process Audit Data", "type": "main", "index": 0 }]]
+    },
+    "Process Audit Data": {
+      "main": [[{ "node": "AI SEO Analysis", "type": "main", "index": 0 }]]
+    },
+    "AI SEO Analysis": {
+      "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]]
+    },
+    "Format Report": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "seo" }, { "name": "audit" }, { "name": "agent-04" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

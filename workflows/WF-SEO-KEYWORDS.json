@@ -1,0 +1,195 @@
+{
+  "name": "WF-SEO-KEYWORDS",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "triggerAtHour": 7, "triggerAtDay": 1 }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Monday 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Seed keywords for research\nconst seedKeywords = ($env.SEO_SEED_KEYWORDS || 'marketing digital,automatisation marketing,agence marketing,publicite en ligne,social media marketing').split(',');\n\nreturn { json: { seed_keywords: seedKeywords, site_url: $env.WEBSITE_URL || 'example.com' } };"
+      },
+      "id": "config-seeds",
+      "name": "Configure Seed Keywords",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?engine=google_autocomplete&q={{ encodeURIComponent($json.seed_keywords[0]) }}&api_key={{ $env.SERPAPI_KEY }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "autocomplete-1",
+      "name": "Google Autocomplete 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?engine=google_autocomplete&q={{ encodeURIComponent($('Configure Seed Keywords').item.json.seed_keywords[1] || 'marketing') }}&api_key={{ $env.SERPAPI_KEY }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "autocomplete-2",
+      "name": "Google Autocomplete 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?engine=google&q={{ encodeURIComponent($('Configure Seed Keywords').item.json.seed_keywords[0]) }}&api_key={{ $env.SERPAPI_KEY }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "serp-analysis",
+      "name": "SERP Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const autocomplete1 = $('Google Autocomplete 1').item.json;\nconst autocomplete2 = $('Google Autocomplete 2').item.json;\nconst serpData = $('SERP Analysis').item.json;\nconst config = $('Configure Seed Keywords').item.json;\n\nconst suggestions1 = (autocomplete1.suggestions || []).map(s => s.value);\nconst suggestions2 = (autocomplete2.suggestions || []).map(s => s.value);\n\nconst relatedSearches = (serpData.related_searches || []).map(r => r.query);\nconst peopleAlsoAsk = (serpData.related_questions || []).map(q => q.question);\n\nreturn {\n  json: {\n    seed_keywords: config.seed_keywords,\n    site_url: config.site_url,\n    autocomplete_suggestions: [...suggestions1, ...suggestions2],\n    related_searches: relatedSearches,\n    people_also_ask: peopleAlsoAsk,\n    top_organic: (serpData.organic_results || []).slice(0, 5).map(r => ({ title: r.title, url: r.link })),\n    ads_present: (serpData.ads || []).length > 0\n  }\n};"
+      },
+      "id": "aggregate-data",
+      "name": "Aggregate Keyword Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un expert en recherche de mots-cles SEO. Analyse les donnees et produis un rapport JSON avec:\n\n- primary_keywords: 10 mots-cles principaux a cibler, chacun avec:\n  - keyword, estimated_difficulty (1-100), estimated_volume (high/medium/low), intent (informational/navigational/commercial/transactional), priority (1-10), content_type_recommended (blog/landing/service)\n\n- long_tail_keywords: 15 mots-cles long tail, chacun avec:\n  - keyword, parent_keyword, estimated_difficulty, content_idea\n\n- question_keywords: 10 questions a cibler (People Also Ask), chacun avec:\n  - question, keyword_target, content_format (FAQ/blog/video)\n\n- content_gaps: 5 opportunites de contenu que les concurrents couvrent mais pas nous\n\n- quick_wins: 5 mots-cles faciles a cibler rapidement\n\n- keyword_clusters: groupes thematiques de mots-cles"
+            },
+            {
+              "role": "user",
+              "content": "=Donnees de recherche:\n{{ JSON.stringify($json) }}\n\nNiche: {{ $env.BUSINESS_NICHE || 'marketing digital' }}\n\nAnalyse et recommandations de mots-cles:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "ai-keywords",
+      "name": "AI Keyword Analysis",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1120, 400],
+      "credentials": {
+        "openAiApi": { "id": "openai-credentials", "name": "OpenAI" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet keywords;\ntry { keywords = JSON.parse(aiResponse); } catch (e) { keywords = { error: 'Parse failed' }; }\n\n// Save primary keywords to seo_tracking table\nconst keywordsToTrack = (keywords.primary_keywords || []).map(kw => ({\n  keyword: kw.keyword,\n  search_volume: kw.estimated_volume === 'high' ? 10000 : kw.estimated_volume === 'medium' ? 1000 : 100,\n  difficulty: kw.estimated_difficulty,\n  date: new Date().toISOString().split('T')[0]\n}));\n\nreturn {\n  json: {\n    report_type: 'keyword_research',\n    generated_at: new Date().toISOString(),\n    agent_id: 'seo-specialist',\n    workflow_id: 'WF-SEO-KEYWORDS',\n    keywords,\n    keywords_to_track: keywordsToTrack\n  }\n};"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "seo-specialist" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-SEO-KEYWORDS" },
+            { "fieldName": "action", "fieldValue": "keyword_research" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ primary_count: $json.keywords.primary_keywords?.length, long_tail_count: $json.keywords.long_tail_keywords?.length }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 400],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-reports",
+        "text": "=:key: *Recherche de mots-cles hebdomadaire*\n\n*Mots-cles principaux identifies:* {{ $json.keywords.primary_keywords?.length || 0 }}\n*Long tail:* {{ $json.keywords.long_tail_keywords?.length || 0 }}\n*Questions PAA:* {{ $json.keywords.question_keywords?.length || 0 }}\n\n*Quick Wins:*\n{{ $json.keywords.quick_wins?.slice(0, 3).map((k, i) => `${i+1}. ${k.keyword || k}`).join('\\n') || 'N/A' }}\n\n_Genere par AI SEO Specialist_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1780, 400],
+      "credentials": {
+        "slackApi": { "id": "slack-credentials", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Monday 7AM": {
+      "main": [[{ "node": "Configure Seed Keywords", "type": "main", "index": 0 }]]
+    },
+    "Configure Seed Keywords": {
+      "main": [
+        [
+          { "node": "Google Autocomplete 1", "type": "main", "index": 0 },
+          { "node": "Google Autocomplete 2", "type": "main", "index": 0 },
+          { "node": "SERP Analysis", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Autocomplete 1": {
+      "main": [[{ "node": "Aggregate Keyword Data", "type": "main", "index": 0 }]]
+    },
+    "Google Autocomplete 2": {
+      "main": [[{ "node": "Aggregate Keyword Data", "type": "main", "index": 0 }]]
+    },
+    "SERP Analysis": {
+      "main": [[{ "node": "Aggregate Keyword Data", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Keyword Data": {
+      "main": [[{ "node": "AI Keyword Analysis", "type": "main", "index": 0 }]]
+    },
+    "AI Keyword Analysis": {
+      "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]]
+    },
+    "Format Report": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "seo" }, { "name": "keywords" }, { "name": "agent-04" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

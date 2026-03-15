@@ -1,0 +1,186 @@
+{
+  "name": "WF-ADS-REPORT",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "triggerAtHour": 9 }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v18.0/act_{{ $env.META_AD_ACCOUNT_ID }}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,reach,frequency,actions,cost_per_action_type,ctr,cpc,cpp&date_preset=yesterday&level=campaign&access_token={{ $env.META_ADS_ACCESS_TOKEN }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-meta-yesterday",
+      "name": "Fetch Meta Yesterday",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v18.0/act_{{ $env.META_AD_ACCOUNT_ID }}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,actions,cost_per_action_type,ctr,cpc&date_preset=last_7d&level=campaign&access_token={{ $env.META_ADS_ACCESS_TOKEN }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-meta-7d",
+      "name": "Fetch Meta 7 Days",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "ad_performance",
+        "filterType": "string",
+        "filterString": "date=gte.{{ new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }}&order=date.desc",
+        "options": {}
+      },
+      "id": "fetch-historical",
+      "name": "Fetch Historical Data",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 600],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const metaYesterday = $('Fetch Meta Yesterday').item.json;\nconst meta7d = $('Fetch Meta 7 Days').item.json;\nconst historical = $('Fetch Historical Data').all() || [];\n\nconst processCampaigns = (data) => (data.data || []).map(c => {\n  const conversions = (c.actions || []).find(a => a.action_type === 'offsite_conversion');\n  return {\n    id: c.campaign_id,\n    name: c.campaign_name,\n    spend: parseFloat(c.spend || 0),\n    impressions: parseInt(c.impressions || 0),\n    clicks: parseInt(c.clicks || 0),\n    conversions: parseInt(conversions?.value || 0),\n    ctr: parseFloat(c.ctr || 0),\n    cpc: parseFloat(c.cpc || 0),\n    reach: parseInt(c.reach || 0)\n  };\n});\n\nreturn {\n  json: {\n    yesterday: processCampaigns(metaYesterday),\n    last_7_days: processCampaigns(meta7d),\n    historical_count: historical.length,\n    report_date: new Date().toISOString().split('T')[0],\n    target_cpa: parseFloat($env.TARGET_CPA || 20),\n    daily_budget: parseFloat($env.DAILY_AD_BUDGET || 100)\n  }\n};"
+      },
+      "id": "process-data",
+      "name": "Process Report Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un media buyer senior qui produit des rapports de performance publicitaire quotidiens.\n\nGenere un rapport JSON avec:\n- executive_summary: resume executif en 2-3 phrases\n- yesterday_performance: performance d'hier\n  - total_spend, total_impressions, total_clicks, total_conversions, avg_cpa, avg_ctr, avg_cpc\n- weekly_performance: performance 7 jours\n  - memes metriques + tendance (up/down/stable)\n- top_campaigns: 3 meilleures campagnes avec raison\n- underperforming: campagnes sous-performantes avec recommandation\n- budget_utilization: taux d'utilisation du budget (%)\n- kpi_status: statut de chaque KPI (on_track/at_risk/off_track)\n- recommendations: 3-5 recommandations actionnables\n- forecast: prevision pour la semaine basee sur les tendances"
+            },
+            {
+              "role": "user",
+              "content": "=Donnees de performance:\n{{ JSON.stringify($json) }}\n\nGenere le rapport quotidien:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "ai-report",
+      "name": "AI Generate Report",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 400],
+      "credentials": {
+        "openAiApi": { "id": "openai-credentials", "name": "OpenAI" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet report;\ntry { report = JSON.parse(aiResponse); } catch (e) { report = { error: 'Parse failed' }; }\n\nreturn {\n  json: {\n    report_type: 'daily_ads_report',\n    generated_at: new Date().toISOString(),\n    agent_id: 'media-buyer',\n    workflow_id: 'WF-ADS-REPORT',\n    report\n  }\n};"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "media-buyer" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-ADS-REPORT" },
+            { "fieldName": "action", "fieldValue": "daily_report" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 400],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-reports",
+        "text": "=:moneybag: *Rapport Publicitaire Quotidien - {{ $json.report.report_date || 'Aujourd\\'hui' }}*\n\n*Resume:* {{ $json.report.executive_summary }}\n\n*Hier:*\n- Depense: {{ $json.report.yesterday_performance?.total_spend?.toFixed(2) || 'N/A' }}$\n- Conversions: {{ $json.report.yesterday_performance?.total_conversions || 0 }}\n- CPA: {{ $json.report.yesterday_performance?.avg_cpa?.toFixed(2) || 'N/A' }}$\n- CTR: {{ $json.report.yesterday_performance?.avg_ctr?.toFixed(2) || 'N/A' }}%\n\n*Recommandations:*\n{{ $json.report.recommendations?.slice(0, 3).map((r, i) => `${i+1}. ${r.title || r}`).join('\\n') || 'N/A' }}\n\n_Genere par AI Media Buyer_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 400],
+      "credentials": {
+        "slackApi": { "id": "slack-credentials", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 9AM": {
+      "main": [
+        [
+          { "node": "Fetch Meta Yesterday", "type": "main", "index": 0 },
+          { "node": "Fetch Meta 7 Days", "type": "main", "index": 0 },
+          { "node": "Fetch Historical Data", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Meta Yesterday": {
+      "main": [[{ "node": "Process Report Data", "type": "main", "index": 0 }]]
+    },
+    "Fetch Meta 7 Days": {
+      "main": [[{ "node": "Process Report Data", "type": "main", "index": 0 }]]
+    },
+    "Fetch Historical Data": {
+      "main": [[{ "node": "Process Report Data", "type": "main", "index": 0 }]]
+    },
+    "Process Report Data": {
+      "main": [[{ "node": "AI Generate Report", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Report": {
+      "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]]
+    },
+    "Format Report": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "ads" }, { "name": "report" }, { "name": "agent-05" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

@@ -1,0 +1,214 @@
+{
+  "name": "WF-CONTENT-CALENDAR",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtDay": 5
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Friday 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "content_calendar",
+        "filterType": "string",
+        "filterString": "status=in.(draft,approved,scheduled)&scheduled_at=gte.{{ $now.toISO() }}",
+        "options": {}
+      },
+      "id": "fetch-existing",
+      "name": "Fetch Existing Content",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "campaigns",
+        "filterType": "string",
+        "filterString": "status=eq.active",
+        "options": {}
+      },
+      "id": "fetch-campaigns",
+      "name": "Fetch Active Campaigns",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 400],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un planificateur editorial expert. Tu crees des calendriers de contenu strategiques pour la semaine a venir.\n\nGenere un JSON 'weekly_plan' avec pour chaque jour (lundi a dimanche):\n- date: date au format YYYY-MM-DD\n- day_name: nom du jour\n- posts: tableau de posts planifies, chaque post avec:\n  - platform: meta|tiktok|linkedin\n  - time: heure de publication (HH:MM)\n  - content_type: educational|behind_scenes|engagement|promo|lifestyle|motivation|value\n  - theme: theme du post\n  - brief: description courte du contenu\n  - campaign_link: id de campagne si lie\n  - priority: high|medium|low\n\nRegles:\n- 2-3 posts par jour minimum\n- Varier les types de contenu\n- Aligner avec les campagnes actives\n- Heures optimales: Meta 10h-12h et 18h-20h, TikTok 12h-14h et 19h-21h, LinkedIn 8h-10h\n- Week-end: contenu plus leger"
+            },
+            {
+              "role": "user",
+              "content": "=Contenu deja planifie:\n{{ JSON.stringify($('Fetch Existing Content').all().map(c => ({ title: c.json.title, platform: c.json.platform, date: c.json.scheduled_at, status: c.json.status }))) }}\n\nCampagnes actives:\n{{ JSON.stringify($('Fetch Active Campaigns').all().map(c => ({ id: c.json.id, name: c.json.name, type: c.json.campaign_type }))) }}\n\nSemaine du: {{ new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }}\nNiche: {{ $env.BUSINESS_NICHE || 'marketing digital' }}\n\nPlanifie la semaine prochaine:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.5,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-calendar",
+      "name": "AI Generate Calendar",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet calendar;\ntry {\n  calendar = JSON.parse(aiResponse);\n} catch (e) {\n  return { json: { error: 'Parse failed' } };\n}\n\n// Flatten all posts into individual items for saving\nconst allPosts = [];\nconst weeklyPlan = calendar.weekly_plan || [];\n\nfor (const day of weeklyPlan) {\n  for (const post of (day.posts || [])) {\n    allPosts.push({\n      title: post.theme || post.brief?.substring(0, 50),\n      content_type: 'post',\n      platform: post.platform,\n      status: 'idea',\n      content: post.brief,\n      scheduled_at: `${day.date}T${post.time || '10:00'}:00Z`,\n      created_by: 'content-creator',\n      campaign_id: post.campaign_link || null\n    });\n  }\n}\n\nreturn allPosts.map(p => ({ json: p }));"
+      },
+      "id": "flatten-posts",
+      "name": "Flatten Calendar Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "content_calendar",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "title", "fieldValue": "={{ $json.title }}" },
+            { "fieldName": "content_type", "fieldValue": "={{ $json.content_type }}" },
+            { "fieldName": "platform", "fieldValue": "={{ $json.platform }}" },
+            { "fieldName": "status", "fieldValue": "idea" },
+            { "fieldName": "content", "fieldValue": "={{ $json.content }}" },
+            { "fieldName": "scheduled_at", "fieldValue": "={{ $json.scheduled_at }}" },
+            { "fieldName": "created_by", "fieldValue": "content-creator" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-calendar",
+      "name": "Save Calendar Items",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "content-creator" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-CONTENT-CALENDAR" },
+            { "fieldName": "action", "fieldValue": "generate_weekly_calendar" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ posts_planned: $items().length }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-content",
+        "text": "=:calendar: *Calendrier editorial de la semaine prochaine genere*\n\n{{ $items().length }} posts planifies.\n\nTous les posts sont en statut 'idea' dans le Content Calendar.\n\n_Genere par AI Content Creator_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Friday 9AM": {
+      "main": [
+        [
+          { "node": "Fetch Existing Content", "type": "main", "index": 0 },
+          { "node": "Fetch Active Campaigns", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Existing Content": {
+      "main": [[{ "node": "AI Generate Calendar", "type": "main", "index": 0 }]]
+    },
+    "Fetch Active Campaigns": {
+      "main": [[{ "node": "AI Generate Calendar", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Calendar": {
+      "main": [[{ "node": "Flatten Calendar Posts", "type": "main", "index": 0 }]]
+    },
+    "Flatten Calendar Posts": {
+      "main": [[{ "node": "Save Calendar Items", "type": "main", "index": 0 }]]
+    },
+    "Save Calendar Items": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "content" }, { "name": "calendar" }, { "name": "agent-02" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

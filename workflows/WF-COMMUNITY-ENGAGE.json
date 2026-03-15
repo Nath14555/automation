@@ -1,0 +1,151 @@
+{
+  "name": "WF-COMMUNITY-ENGAGE",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10
+            },
+            {
+              "triggerAtHour": 14
+            },
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "3x Daily (10h, 14h, 18h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "content_calendar",
+        "filterType": "string",
+        "filterString": "status=eq.published&platform=in.(meta,tiktok,linkedin)&published_at=gte.{{ new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString() }}&order=published_at.desc&limit=10",
+        "options": {}
+      },
+      "id": "fetch-recent-posts",
+      "name": "Fetch Recent Published Posts",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Define engagement actions to take\nconst recentPosts = $('Fetch Recent Published Posts').all() || [];\nconst hour = new Date().getHours();\n\nconst engagementTasks = {\n  check_comments: {\n    description: 'Verifier les commentaires non repondus sur nos posts recents',\n    posts: recentPosts.map(p => ({ id: p.json.id, platform: p.json.platform, title: p.json.title }))\n  },\n  check_mentions: {\n    description: 'Verifier les mentions de la marque',\n    platforms: ['meta', 'tiktok', 'linkedin']\n  },\n  proactive_engage: {\n    description: 'Engagement proactif sur des posts pertinents de notre industrie',\n    keywords: ($env.ENGAGEMENT_KEYWORDS || 'marketing digital,automatisation,IA marketing').split(',')\n  },\n  session_time: hour < 12 ? 'morning' : (hour < 16 ? 'afternoon' : 'evening')\n};\n\nreturn { json: engagementTasks };"
+      },
+      "id": "plan-engagement",
+      "name": "Plan Engagement Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un community manager qui planifie des sessions d'engagement. Genere un plan JSON avec:\n\n- engagement_actions: tableau d'actions a effectuer\n  - type: reply_comment|like_post|comment_industry|share_content|reply_mention\n  - platform: meta|tiktok|linkedin\n  - suggested_comment: texte du commentaire si applicable (court, naturel, pas commercial)\n  - priority: high|medium|low\n  - reason: pourquoi cette action\n\n- engagement_tips: 3 conseils pour la session\n- estimated_duration: duree estimee en minutes\n\nRegles:\n- Maximum 15-20 interactions par session\n- Commentaires courts et naturels (pas de promotion directe)\n- Varier les types d'engagement\n- Prioriser les reponses aux commentaires sur nos posts\n- Ne pas commenter plus de 2-3 fois sur les memes comptes"
+            },
+            {
+              "role": "user",
+              "content": "=Session d'engagement {{ $json.session_time }}:\n\nNos posts recents: {{ JSON.stringify($json.check_comments.posts) }}\nMots-cles industrie: {{ $json.proactive_engage.keywords.join(', ') }}\nNiche: {{ $env.BUSINESS_NICHE || 'marketing digital' }}\n\nGenere le plan d'engagement:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.6,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-plan",
+      "name": "AI Generate Engagement Plan",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet plan;\ntry {\n  plan = JSON.parse(aiResponse);\n} catch (e) {\n  plan = { error: 'Parse failed' };\n}\n\nreturn {\n  json: {\n    report_type: 'engagement_session',\n    session_time: new Date().toISOString(),\n    agent_id: 'community-manager',\n    workflow_id: 'WF-COMMUNITY-ENGAGE',\n    plan,\n    total_actions: plan.engagement_actions?.length || 0\n  }\n};"
+      },
+      "id": "format-plan",
+      "name": "Format Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "community-manager" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-COMMUNITY-ENGAGE" },
+            { "fieldName": "action", "fieldValue": "engagement_session" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "3x Daily (10h, 14h, 18h)": {
+      "main": [[{ "node": "Fetch Recent Published Posts", "type": "main", "index": 0 }]]
+    },
+    "Fetch Recent Published Posts": {
+      "main": [[{ "node": "Plan Engagement Session", "type": "main", "index": 0 }]]
+    },
+    "Plan Engagement Session": {
+      "main": [[{ "node": "AI Generate Engagement Plan", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Engagement Plan": {
+      "main": [[{ "node": "Format Plan", "type": "main", "index": 0 }]]
+    },
+    "Format Plan": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "community" }, { "name": "engagement" }, { "name": "agent-03" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

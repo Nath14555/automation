@@ -1,0 +1,273 @@
+{
+  "name": "WF-COMMUNITY-COMMENTS",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/comments",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Comments",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "community-comments"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Normalize comment payload from any platform\nconst body = $input.item.json.body || $input.item.json;\n\nlet normalized;\n\n// Meta (Facebook/Instagram) comment format\nif (body.object === 'page' || body.object === 'instagram') {\n  const change = body.entry?.[0]?.changes?.[0];\n  const value = change?.value || {};\n  normalized = {\n    source: 'meta',\n    platform: body.object === 'instagram' ? 'instagram' : 'facebook',\n    comment_id: value.comment_id || value.id,\n    post_id: value.post_id || value.parent_id,\n    sender_id: value.from?.id || 'unknown',\n    sender_name: value.from?.name || 'Unknown',\n    message: value.message || value.text || '',\n    is_reply: !!value.parent_id,\n    parent_comment_id: value.parent_id || null,\n    timestamp: new Date().toISOString()\n  };\n} \n// TikTok comment format\nelse if (body.event === 'comment' || body.source === 'tiktok') {\n  normalized = {\n    source: 'tiktok',\n    platform: 'tiktok',\n    comment_id: body.comment_id || body.data?.comment_id,\n    post_id: body.video_id || body.data?.video_id,\n    sender_id: body.user_id || body.data?.user_id || 'unknown',\n    sender_name: body.username || body.data?.username || 'Unknown',\n    message: body.text || body.data?.text || '',\n    is_reply: !!body.reply_to_comment_id,\n    parent_comment_id: body.reply_to_comment_id || null,\n    timestamp: new Date().toISOString()\n  };\n}\n// Generic format\nelse {\n  normalized = {\n    source: body.source || 'unknown',\n    platform: body.platform || 'unknown',\n    comment_id: body.comment_id || 'unknown',\n    post_id: body.post_id || 'unknown',\n    sender_id: body.sender_id || 'unknown',\n    sender_name: body.sender_name || 'Unknown',\n    message: body.message || body.text || '',\n    is_reply: false,\n    parent_comment_id: null,\n    timestamp: new Date().toISOString()\n  };\n}\n\nreturn { json: normalized };"
+      },
+      "id": "normalize-comment",
+      "name": "Normalize Comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un community manager expert. Analyse ce commentaire et decide de l'action a prendre.\n\nRetourne un JSON avec:\n- sentiment: positive|neutral|negative\n- sentiment_score: -1.0 a 1.0\n- intent: question|compliment|complaint|spam|troll|engagement|other\n- requires_response: true/false\n- requires_moderation: true/false (spam, insultes, contenu inapproprie)\n- requires_escalation: true/false (plaintes graves, menaces legales)\n- suggested_response: reponse suggeree si requires_response est true\n- response_tone: friendly|empathetic|professional|playful\n- moderation_action: none|hide|delete|report\n- escalation_reason: raison si escalation necessaire\n\nRegles:\n- Toujours repondre aux questions\n- Remercier les compliments\n- Repondre avec empathie aux plaintes\n- Ne pas nourrir les trolls\n- Cacher le spam\n- Escalader les menaces legales"
+            },
+            {
+              "role": "user",
+              "content": "=Plateforme: {{ $json.platform }}\nCommentaire de {{ $json.sender_name }}:\n\"{{ $json.message }}\"\n\nEst-ce une reponse a un autre commentaire: {{ $json.is_reply }}\n\nBrand voice: {{ $env.BRAND_VOICE || 'professionnel mais accessible' }}\n\nAnalyse et genere la reponse:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.5,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "analyze-comment",
+      "name": "AI Analyze Comment",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const comment = $('Normalize Comment').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet analysis;\ntry {\n  analysis = JSON.parse(aiResponse);\n} catch (e) {\n  analysis = { requires_response: false, requires_moderation: false, sentiment: 'neutral' };\n}\n\nreturn {\n  json: {\n    ...comment,\n    ...analysis,\n    agent_id: 'community-manager',\n    workflow_id: 'WF-COMMUNITY-COMMENTS'\n  }\n};"
+      },
+      "id": "merge-data",
+      "name": "Merge Comment + Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requires_moderation }}",
+                    "rightValue": true,
+                    "operator": { "type": "boolean", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "moderate"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requires_escalation }}",
+                    "rightValue": true,
+                    "operator": { "type": "boolean", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "escalate"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.requires_response }}",
+                    "rightValue": true,
+                    "operator": { "type": "boolean", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "respond"
+            }
+          ]
+        },
+        "options": { "allMatchingOutputs": true }
+      },
+      "id": "route-action",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v18.0/{{ $json.comment_id }}/replies",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"message\": {{ JSON.stringify($json.suggested_response) }} }",
+        "options": {}
+      },
+      "id": "reply-meta",
+      "name": "Reply on Meta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 400],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "meta-credentials",
+          "name": "Meta Graph API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "handoff_queue",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "conversation_id", "fieldValue": "=comment_{{ $json.comment_id }}" },
+            { "fieldName": "sender_id", "fieldValue": "={{ $json.sender_id }}" },
+            { "fieldName": "sender_name", "fieldValue": "={{ $json.sender_name }}" },
+            { "fieldName": "source", "fieldValue": "={{ $json.source }}" },
+            { "fieldName": "reason", "fieldValue": "={{ $json.escalation_reason || 'Comment requires human review' }}" },
+            { "fieldName": "priority", "fieldValue": "high" },
+            { "fieldName": "last_message", "fieldValue": "={{ $json.message }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "escalate-human",
+      "name": "Escalate to Human",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Log moderation action - in production this would call the platform's moderation API\nreturn {\n  json: {\n    action: 'moderate',\n    moderation_action: $json.moderation_action,\n    comment_id: $json.comment_id,\n    platform: $json.platform,\n    reason: $json.intent\n  }\n};"
+      },
+      "id": "moderate-comment",
+      "name": "Moderate Comment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 100]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "community-manager" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-COMMUNITY-COMMENTS" },
+            { "fieldName": "action", "fieldValue": "comment_processed" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ comment_id: $json.comment_id, sentiment: $json.sentiment, action: $json.requires_response ? 'responded' : ($json.requires_moderation ? 'moderated' : 'no_action') }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'processed', comment_id: $json.comment_id }) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Comments": {
+      "main": [[{ "node": "Normalize Comment", "type": "main", "index": 0 }]]
+    },
+    "Normalize Comment": {
+      "main": [[{ "node": "AI Analyze Comment", "type": "main", "index": 0 }]]
+    },
+    "AI Analyze Comment": {
+      "main": [[{ "node": "Merge Comment + Analysis", "type": "main", "index": 0 }]]
+    },
+    "Merge Comment + Analysis": {
+      "main": [[{ "node": "Route Action", "type": "main", "index": 0 }]]
+    },
+    "Route Action": {
+      "main": [
+        [{ "node": "Moderate Comment", "type": "main", "index": 0 }],
+        [{ "node": "Escalate to Human", "type": "main", "index": 0 }],
+        [{ "node": "Reply on Meta", "type": "main", "index": 0 }]
+      ]
+    },
+    "Moderate Comment": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Escalate to Human": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Reply on Meta": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "community" }, { "name": "comments" }, { "name": "agent-03" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

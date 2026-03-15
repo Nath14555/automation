@@ -1,0 +1,199 @@
+{
+  "name": "WF-STRATEGY-BRIEF",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/strategy-brief",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Brief Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "strategy-brief"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "agent_logs",
+        "filterType": "string",
+        "filterString": "agent_id=eq.marketing-strategist&order=created_at.desc&limit=5",
+        "options": {}
+      },
+      "id": "fetch-recent-insights",
+      "name": "Fetch Recent Insights",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un directeur de strategie marketing senior. Tu produis des briefs creatifs detailles et actionnables pour les equipes de contenu, publicite et email marketing.\n\nGenere un brief JSON structure avec:\n- campaign_name: nom de la campagne\n- objective: objectif principal (awareness/engagement/conversion/retention)\n- target_audience: description detaillee de l'audience cible\n- key_message: message cle a communiquer\n- tone_of_voice: ton a adopter\n- channels: canaux a utiliser avec priorite\n- content_requirements: ce que le Content Creator doit produire\n  - social_posts: nombre et type de posts par plateforme\n  - blog_articles: sujets d'articles\n  - video_scripts: nombre et type de videos\n  - email_sequences: sequences email a creer\n- ad_requirements: ce que le Media Buyer doit configurer\n  - platforms: plateformes publicitaires\n  - budget_split: repartition du budget\n  - audience_targeting: criteres de ciblage\n  - ad_formats: formats publicitaires\n- kpis: KPIs a suivre avec objectifs chiffres\n- timeline: calendrier avec milestones\n- budget: budget total et repartition"
+            },
+            {
+              "role": "user",
+              "content": "=Demande de brief:\n{{ JSON.stringify($('Webhook Brief Request').item.json.body) }}\n\nInsights recents de nos analyses:\n{{ JSON.stringify($('Fetch Recent Insights').item.json) }}\n\nNiche: {{ $env.BUSINESS_NICHE || 'marketing digital' }}\nBrand voice: {{ $env.BRAND_VOICE || 'professionnel mais accessible' }}\n\nGenere le brief creatif complet:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.5,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-brief",
+      "name": "AI Generate Brief",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet brief;\ntry {\n  brief = JSON.parse(aiResponse);\n} catch (e) {\n  brief = { error: 'Parse failed', raw: aiResponse };\n}\n\nreturn {\n  json: {\n    report_type: 'creative_brief',\n    generated_at: new Date().toISOString(),\n    agent_id: 'marketing-strategist',\n    workflow_id: 'WF-STRATEGY-BRIEF',\n    brief,\n    request: $('Webhook Brief Request').item.json.body\n  }\n};"
+      },
+      "id": "format-brief",
+      "name": "Format Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "campaigns",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "name", "fieldValue": "={{ $json.brief.campaign_name || 'New Campaign' }}" },
+            { "fieldName": "campaign_type", "fieldValue": "={{ $json.brief.objective || 'awareness' }}" },
+            { "fieldName": "status", "fieldValue": "planning" },
+            { "fieldName": "channels", "fieldValue": "={{ JSON.stringify($json.brief.channels || []) }}" },
+            { "fieldName": "budget", "fieldValue": "={{ $json.brief.budget?.total || 0 }}" },
+            { "fieldName": "objectives", "fieldValue": "={{ JSON.stringify($json.brief.kpis || []) }}" },
+            { "fieldName": "brief", "fieldValue": "={{ JSON.stringify($json.brief) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-campaign",
+      "name": "Save Campaign",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "marketing-strategist" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-STRATEGY-BRIEF" },
+            { "fieldName": "action", "fieldValue": "brief_generation" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-reports",
+        "text": "=:memo: *Nouveau Brief Creatif Genere*\n\n*Campagne:* {{ $json.brief.campaign_name }}\n*Objectif:* {{ $json.brief.objective }}\n*Budget:* {{ $json.brief.budget?.total }}$\n*Canaux:* {{ $json.brief.channels?.map(c => c.name || c).join(', ') }}\n\n*Message cle:* {{ $json.brief.key_message }}\n\n*Contenu requis:*\n- Posts sociaux: {{ $json.brief.content_requirements?.social_posts?.total || 'A definir' }}\n- Articles blog: {{ $json.brief.content_requirements?.blog_articles?.length || 0 }}\n- Videos: {{ $json.brief.content_requirements?.video_scripts?.length || 0 }}\n\n_Brief complet disponible dans Supabase_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, campaign_name: $json.brief.campaign_name, brief_id: $('Save Campaign').item.json.id }) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Brief Request": {
+      "main": [[{ "node": "Fetch Recent Insights", "type": "main", "index": 0 }]]
+    },
+    "Fetch Recent Insights": {
+      "main": [[{ "node": "AI Generate Brief", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Brief": {
+      "main": [[{ "node": "Format Brief", "type": "main", "index": 0 }]]
+    },
+    "Format Brief": {
+      "main": [[{ "node": "Save Campaign", "type": "main", "index": 0 }]]
+    },
+    "Save Campaign": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [
+        [
+          { "node": "Notify Slack", "type": "main", "index": 0 },
+          { "node": "Respond", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "strategy" }, { "name": "brief" }, { "name": "agent-01" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

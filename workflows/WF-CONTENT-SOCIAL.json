@@ -1,0 +1,229 @@
+{
+  "name": "WF-CONTENT-SOCIAL",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "content_calendar",
+        "filterType": "string",
+        "filterString": "status=eq.approved&scheduled_at=gte.{{ $now.toISO().split('T')[0] }}T00:00:00&scheduled_at=lte.{{ $now.toISO().split('T')[0] }}T23:59:59",
+        "options": {}
+      },
+      "id": "fetch-scheduled",
+      "name": "Fetch Today Scheduled Content",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "campaigns",
+        "filterType": "string",
+        "filterString": "status=eq.active",
+        "options": { "returnCount": "exactCount" }
+      },
+      "id": "fetch-campaigns",
+      "name": "Fetch Active Campaigns",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 400],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Determine what content to generate today\nconst scheduledContent = $('Fetch Today Scheduled Content').all() || [];\nconst activeCampaigns = $('Fetch Active Campaigns').all() || [];\nconst dayOfWeek = new Date().getDay(); // 0=Sun, 1=Mon, ...\n\n// Content calendar template per day\nconst dailyContentPlan = {\n  1: { platforms: ['meta', 'linkedin'], types: ['educational', 'tip'] },        // Monday\n  2: { platforms: ['meta', 'tiktok'], types: ['behind_scenes', 'story'] },       // Tuesday\n  3: { platforms: ['meta', 'linkedin', 'tiktok'], types: ['value', 'carousel'] },// Wednesday\n  4: { platforms: ['meta', 'tiktok'], types: ['engagement', 'poll'] },           // Thursday\n  5: { platforms: ['meta', 'tiktok', 'linkedin'], types: ['promo', 'cta'] },     // Friday\n  6: { platforms: ['meta', 'tiktok'], types: ['lifestyle', 'fun'] },             // Saturday\n  0: { platforms: ['meta'], types: ['motivation', 'recap'] }                     // Sunday\n};\n\nconst todayPlan = dailyContentPlan[dayOfWeek] || dailyContentPlan[1];\n\nreturn {\n  json: {\n    date: new Date().toISOString().split('T')[0],\n    day_of_week: dayOfWeek,\n    scheduled_count: scheduledContent.length,\n    active_campaigns: activeCampaigns.map(c => c.json),\n    platforms: todayPlan.platforms,\n    content_types: todayPlan.types,\n    brand_voice: $env.BRAND_VOICE || 'professionnel mais accessible, inspire confiance',\n    business_niche: $env.BUSINESS_NICHE || 'marketing digital'\n  }\n};"
+      },
+      "id": "plan-content",
+      "name": "Plan Today Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un content creator expert en marketing digital. Tu crees du contenu engageant adapte a chaque plateforme.\n\nGenere un JSON avec un tableau 'posts' contenant pour chaque plateforme:\n- platform: meta|tiktok|linkedin\n- content_type: type de contenu\n- caption: le texte du post (adapte a la plateforme)\n- hashtags: 5-10 hashtags pertinents\n- visual_prompt: prompt detaille pour generer le visuel avec DALL-E\n- best_time: meilleure heure de publication (HH:MM)\n- cta: call to action\n- hook: phrase d'accroche (premiere ligne)\n- carousel_slides: (si carousel) tableau de textes par slide\n\nRegles par plateforme:\n- Meta (Facebook/Instagram): 150-300 caracteres, emojis moderes, CTA clair\n- TikTok: court, punchy, tendance, hashtags viraux\n- LinkedIn: professionnel, valeur ajoutee, 200-500 caracteres, storytelling"
+            },
+            {
+              "role": "user",
+              "content": "=Plan du jour:\n- Date: {{ $json.date }}\n- Plateformes: {{ $json.platforms.join(', ') }}\n- Types de contenu: {{ $json.content_types.join(', ') }}\n- Brand voice: {{ $json.brand_voice }}\n- Niche: {{ $json.business_niche }}\n\nCampagnes actives:\n{{ JSON.stringify($json.active_campaigns?.slice(0, 3)) }}\n\nGenere les posts pour aujourd'hui:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-posts",
+      "name": "AI Generate Posts",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse AI response and create individual post items\nconst aiResponse = $input.item.json.message.content;\nlet posts;\ntry {\n  const parsed = JSON.parse(aiResponse);\n  posts = parsed.posts || [parsed];\n} catch (e) {\n  posts = [{ error: 'Parse failed', raw: aiResponse }];\n}\n\n// Return each post as separate item for batch processing\nreturn posts.map(post => ({\n  json: {\n    ...post,\n    date: $('Plan Today Content').item.json.date,\n    agent_id: 'content-creator',\n    workflow_id: 'WF-CONTENT-SOCIAL',\n    status: 'draft'\n  }\n}));"
+      },
+      "id": "split-posts",
+      "name": "Split Into Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "content_calendar",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "title", "fieldValue": "={{ $json.hook || $json.caption?.substring(0, 50) || 'Post' }}" },
+            { "fieldName": "content_type", "fieldValue": "post" },
+            { "fieldName": "platform", "fieldValue": "={{ $json.platform }}" },
+            { "fieldName": "status", "fieldValue": "draft" },
+            { "fieldName": "content", "fieldValue": "={{ $json.caption }}" },
+            { "fieldName": "hashtags", "fieldValue": "={{ JSON.stringify($json.hashtags || []) }}" },
+            { "fieldName": "variants", "fieldValue": "={{ JSON.stringify($json.carousel_slides || []) }}" },
+            { "fieldName": "scheduled_at", "fieldValue": "={{ $json.date }}T{{ $json.best_time || '10:00' }}:00Z" },
+            { "fieldName": "created_by", "fieldValue": "content-creator" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-posts",
+      "name": "Save to Content Calendar",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "content-creator" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-CONTENT-SOCIAL" },
+            { "fieldName": "action", "fieldValue": "generate_social_posts" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ posts_count: $items().length, date: $json.date }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-content",
+        "text": "=:pencil2: *Contenu du jour genere*\n\n{{ $items().length }} posts crees pour {{ $json.date }}\n\nPosts en attente d'approbation dans le Content Calendar.\n\n_Genere par AI Content Creator_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1780, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 7AM": {
+      "main": [
+        [
+          { "node": "Fetch Today Scheduled Content", "type": "main", "index": 0 },
+          { "node": "Fetch Active Campaigns", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Today Scheduled Content": {
+      "main": [[{ "node": "Plan Today Content", "type": "main", "index": 0 }]]
+    },
+    "Fetch Active Campaigns": {
+      "main": [[{ "node": "Plan Today Content", "type": "main", "index": 0 }]]
+    },
+    "Plan Today Content": {
+      "main": [[{ "node": "AI Generate Posts", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Posts": {
+      "main": [[{ "node": "Split Into Posts", "type": "main", "index": 0 }]]
+    },
+    "Split Into Posts": {
+      "main": [[{ "node": "Save to Content Calendar", "type": "main", "index": 0 }]]
+    },
+    "Save to Content Calendar": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "content" }, { "name": "social" }, { "name": "agent-02" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

@@ -1,0 +1,183 @@
+{
+  "name": "WF-STRATEGY-TRENDS",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8,
+              "triggerAtDay": 1
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Monday 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Define trending topics to monitor\nconst config = {\n  keywords: [\n    $env.BUSINESS_NICHE || 'marketing digital',\n    $env.BUSINESS_KEYWORD_1 || 'social media marketing',\n    $env.BUSINESS_KEYWORD_2 || 'automatisation marketing',\n    $env.BUSINESS_KEYWORD_3 || 'intelligence artificielle marketing',\n    $env.BUSINESS_KEYWORD_4 || 'publicite en ligne'\n  ],\n  geo: $env.TRENDS_GEO || 'FR',\n  timeframe: 'now 7-d',\n  category: 0\n};\n\nreturn { json: config };"
+      },
+      "id": "config-keywords",
+      "name": "Configure Keywords",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?engine=google_trends&q={{ encodeURIComponent($json.keywords.join(',')) }}&geo={{ $json.geo }}&date={{ $json.timeframe }}&api_key={{ $env.SERPAPI_KEY }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-trends",
+      "name": "Fetch Google Trends",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?engine=google_trends_trending_now&geo={{ $('Configure Keywords').item.json.geo }}&api_key={{ $env.SERPAPI_KEY }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-trending-now",
+      "name": "Fetch Trending Now",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un stratege marketing senior. Analyse les donnees de tendances Google Trends et les sujets trending pour identifier les opportunites marketing.\n\nProduis un rapport JSON structure avec:\n- top_trends: les 5 tendances les plus pertinentes pour notre niche\n- opportunities: 3 opportunites marketing concretes a exploiter\n- content_ideas: 5 idees de contenu basees sur les tendances\n- risks: risques ou tendances negatives a surveiller\n- recommended_actions: 3 actions prioritaires pour la semaine\n\nChaque element doit avoir: title, description, relevance_score (0-100), urgency (low/medium/high)"
+            },
+            {
+              "role": "user",
+              "content": "=Donnees Google Trends pour nos mots-cles:\n{{ JSON.stringify($('Fetch Google Trends').item.json) }}\n\nSujets trending actuellement:\n{{ JSON.stringify($('Fetch Trending Now').item.json?.trending_searches?.slice(0, 20)) }}\n\nNotre niche: {{ $env.BUSINESS_NICHE || 'marketing digital' }}\n\nAnalyse ces donnees et produis le rapport strategique."
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.4,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "analyze-trends",
+      "name": "AI Analyze Trends",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 400],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse and structure the AI analysis\nconst aiResponse = $input.item.json.message.content;\nlet analysis;\ntry {\n  analysis = JSON.parse(aiResponse);\n} catch (e) {\n  analysis = { error: 'Failed to parse AI response', raw: aiResponse };\n}\n\nconst report = {\n  report_type: 'weekly_trends',\n  generated_at: new Date().toISOString(),\n  period: {\n    start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],\n    end: new Date().toISOString().split('T')[0]\n  },\n  niche: $env.BUSINESS_NICHE || 'marketing digital',\n  analysis: analysis,\n  agent_id: 'marketing-strategist',\n  workflow_id: 'WF-STRATEGY-TRENDS'\n};\n\nreturn { json: report };"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "marketing-strategist" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-STRATEGY-TRENDS" },
+            { "fieldName": "action", "fieldValue": "trend_analysis" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log to Agent Logs",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 400],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-reports",
+        "text": "=:chart_with_upwards_trend: *Rapport Tendances Hebdomadaire*\n\n*Periode:* {{ $json.period.start }} - {{ $json.period.end }}\n*Niche:* {{ $json.niche }}\n\n*Top Tendances:*\n{{ $json.analysis.top_trends?.map((t, i) => `${i+1}. ${t.title} (Score: ${t.relevance_score}/100)`).join('\\n') }}\n\n*Opportunites:*\n{{ $json.analysis.opportunities?.map((o, i) => `${i+1}. ${o.title} - ${o.description}`).join('\\n') }}\n\n*Actions recommandees:*\n{{ $json.analysis.recommended_actions?.map((a, i) => `${i+1}. [${a.urgency?.toUpperCase()}] ${a.title}`).join('\\n') }}\n\n_Genere automatiquement par AI Marketing Strategist_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Monday 8AM": {
+      "main": [[{ "node": "Configure Keywords", "type": "main", "index": 0 }]]
+    },
+    "Configure Keywords": {
+      "main": [
+        [
+          { "node": "Fetch Google Trends", "type": "main", "index": 0 },
+          { "node": "Fetch Trending Now", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Google Trends": {
+      "main": [[{ "node": "AI Analyze Trends", "type": "main", "index": 0 }]]
+    },
+    "Fetch Trending Now": {
+      "main": [[{ "node": "AI Analyze Trends", "type": "main", "index": 0 }]]
+    },
+    "AI Analyze Trends": {
+      "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]]
+    },
+    "Format Report": {
+      "main": [[{ "node": "Log to Agent Logs", "type": "main", "index": 0 }]]
+    },
+    "Log to Agent Logs": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "strategy" }, { "name": "trends" }, { "name": "agent-01" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

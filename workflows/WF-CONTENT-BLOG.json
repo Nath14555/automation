@@ -1,0 +1,214 @@
+{
+  "name": "WF-CONTENT-BLOG",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8,
+              "triggerAtDay": 1
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Monday 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "seo_tracking",
+        "filterType": "string",
+        "filterString": "order=search_volume.desc&limit=20",
+        "options": {}
+      },
+      "id": "fetch-keywords",
+      "name": "Fetch Top Keywords",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "agent_logs",
+        "filterType": "string",
+        "filterString": "workflow_id=eq.WF-STRATEGY-TRENDS&order=created_at.desc&limit=1",
+        "options": {}
+      },
+      "id": "fetch-trends",
+      "name": "Fetch Latest Trends",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 400],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un redacteur SEO expert. Tu crees des articles de blog optimises pour le referencement naturel tout en etant engageants pour les lecteurs.\n\nGenere un JSON avec:\n- title: titre SEO optimise (50-60 caracteres)\n- slug: URL-friendly slug\n- meta_description: meta description (150-160 caracteres)\n- target_keyword: mot-cle principal cible\n- secondary_keywords: 3-5 mots-cles secondaires\n- outline: plan de l'article avec H2/H3\n- introduction: paragraphe d'introduction (150-200 mots, avec hook)\n- sections: tableau de sections, chaque section avec:\n  - heading: titre H2\n  - content: contenu complet (200-400 mots par section)\n  - subsections: sous-sections H3 si necessaire\n- conclusion: paragraphe de conclusion avec CTA\n- internal_links_suggestions: suggestions de liens internes\n- word_count: nombre total de mots\n- reading_time: temps de lecture estime\n- schema_type: type de schema.org recommande (Article, HowTo, FAQ)\n- faq: 3-5 questions FAQ avec reponses courtes"
+            },
+            {
+              "role": "user",
+              "content": "=Mots-cles prioritaires de notre SEO tracking:\n{{ JSON.stringify($('Fetch Top Keywords').all().map(k => k.json).slice(0, 10)) }}\n\nTendances recentes:\n{{ JSON.stringify($('Fetch Latest Trends').item.json?.output_data) }}\n\nNiche: {{ $env.BUSINESS_NICHE || 'marketing digital' }}\nBrand voice: {{ $env.BRAND_VOICE || 'expert mais accessible' }}\nSite web: {{ $env.WEBSITE_URL || 'example.com' }}\n\nGenere un article de blog complet et SEO-optimise:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.6,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-article",
+      "name": "AI Generate Article",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet article;\ntry {\n  article = JSON.parse(aiResponse);\n} catch (e) {\n  article = { error: 'Parse failed', raw: aiResponse };\n}\n\n// Build full HTML content\nlet htmlContent = `<p>${article.introduction || ''}</p>\\n\\n`;\n\nif (article.sections) {\n  for (const section of article.sections) {\n    htmlContent += `<h2>${section.heading}</h2>\\n`;\n    htmlContent += `<p>${section.content}</p>\\n`;\n    if (section.subsections) {\n      for (const sub of section.subsections) {\n        htmlContent += `<h3>${sub.heading}</h3>\\n`;\n        htmlContent += `<p>${sub.content}</p>\\n`;\n      }\n    }\n  }\n}\n\nhtmlContent += `<h2>Conclusion</h2>\\n<p>${article.conclusion || ''}</p>\\n`;\n\nif (article.faq && article.faq.length > 0) {\n  htmlContent += `<h2>FAQ</h2>\\n`;\n  for (const faq of article.faq) {\n    htmlContent += `<h3>${faq.question}</h3>\\n<p>${faq.answer}</p>\\n`;\n  }\n}\n\nreturn {\n  json: {\n    ...article,\n    html_content: htmlContent,\n    agent_id: 'content-creator',\n    workflow_id: 'WF-CONTENT-BLOG',\n    generated_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "build-html",
+      "name": "Build HTML Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "content_calendar",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "title", "fieldValue": "={{ $json.title }}" },
+            { "fieldName": "content_type", "fieldValue": "article" },
+            { "fieldName": "platform", "fieldValue": "blog" },
+            { "fieldName": "status", "fieldValue": "draft" },
+            { "fieldName": "content", "fieldValue": "={{ $json.html_content }}" },
+            { "fieldName": "hashtags", "fieldValue": "={{ JSON.stringify($json.secondary_keywords || []) }}" },
+            { "fieldName": "created_by", "fieldValue": "content-creator" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-article",
+      "name": "Save Article",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "content-creator" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-CONTENT-BLOG" },
+            { "fieldName": "action", "fieldValue": "generate_blog_article" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ title: $json.title, word_count: $json.word_count, keyword: $json.target_keyword }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-content",
+        "text": "=:newspaper: *Nouvel article de blog genere*\n\n*Titre:* {{ $json.title }}\n*Mot-cle cible:* {{ $json.target_keyword }}\n*Mots:* {{ $json.word_count }} | *Lecture:* {{ $json.reading_time }}\n\nArticle en attente de review dans le Content Calendar.\n\n_Genere par AI Content Creator_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Monday 8AM": {
+      "main": [
+        [
+          { "node": "Fetch Top Keywords", "type": "main", "index": 0 },
+          { "node": "Fetch Latest Trends", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Top Keywords": {
+      "main": [[{ "node": "AI Generate Article", "type": "main", "index": 0 }]]
+    },
+    "Fetch Latest Trends": {
+      "main": [[{ "node": "AI Generate Article", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Article": {
+      "main": [[{ "node": "Build HTML Content", "type": "main", "index": 0 }]]
+    },
+    "Build HTML Content": {
+      "main": [[{ "node": "Save Article", "type": "main", "index": 0 }]]
+    },
+    "Save Article": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "content" }, { "name": "blog" }, { "name": "agent-02" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

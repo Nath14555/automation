@@ -1,0 +1,196 @@
+{
+  "name": "WF-STRATEGY-COMPETITOR",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtDay": 1
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Monday 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Configure competitor URLs to monitor\nconst competitors = [\n  {\n    name: $env.COMPETITOR_1_NAME || 'Concurrent 1',\n    website: $env.COMPETITOR_1_URL || 'https://competitor1.com',\n    social: {\n      facebook: $env.COMPETITOR_1_FB || '',\n      instagram: $env.COMPETITOR_1_IG || '',\n      tiktok: $env.COMPETITOR_1_TT || ''\n    }\n  },\n  {\n    name: $env.COMPETITOR_2_NAME || 'Concurrent 2',\n    website: $env.COMPETITOR_2_URL || 'https://competitor2.com',\n    social: {\n      facebook: $env.COMPETITOR_2_FB || '',\n      instagram: $env.COMPETITOR_2_IG || '',\n      tiktok: $env.COMPETITOR_2_TT || ''\n    }\n  },\n  {\n    name: $env.COMPETITOR_3_NAME || 'Concurrent 3',\n    website: $env.COMPETITOR_3_URL || 'https://competitor3.com',\n    social: {\n      facebook: $env.COMPETITOR_3_FB || '',\n      instagram: $env.COMPETITOR_3_IG || '',\n      tiktok: $env.COMPETITOR_3_TT || ''\n    }\n  }\n];\n\nreturn competitors.map(c => ({ json: c }));"
+      },
+      "id": "config-competitors",
+      "name": "Configure Competitors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.website }}",
+        "options": {
+          "timeout": 15000,
+          "redirect": { "redirect": { "followRedirects": true } }
+        }
+      },
+      "id": "scrape-website",
+      "name": "Scrape Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://serpapi.com/search.json?engine=google&q={{ encodeURIComponent($json.name) }}&num=10&api_key={{ $env.SERPAPI_KEY }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "search-mentions",
+      "name": "Search Competitor Mentions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract key info from scraped website\nconst html = $('Scrape Website').item.json.data || '';\nconst competitorInfo = $('Configure Competitors').item.json;\nconst searchResults = $('Search Competitor Mentions').item.json;\n\n// Extract meta info from HTML\nconst titleMatch = html.match(/<title>(.*?)<\\/title>/i);\nconst descMatch = html.match(/<meta\\s+name=[\"']description[\"']\\s+content=[\"'](.*?)[\"']/i);\nconst h1Match = html.match(/<h1[^>]*>(.*?)<\\/h1>/gi);\n\nconst extracted = {\n  competitor: competitorInfo,\n  website_data: {\n    title: titleMatch ? titleMatch[1] : 'N/A',\n    meta_description: descMatch ? descMatch[1] : 'N/A',\n    h1_tags: h1Match ? h1Match.map(h => h.replace(/<[^>]*>/g, '')).slice(0, 5) : []\n  },\n  search_presence: {\n    organic_results_count: searchResults?.organic_results?.length || 0,\n    top_results: (searchResults?.organic_results || []).slice(0, 5).map(r => ({\n      title: r.title,\n      link: r.link,\n      snippet: r.snippet\n    })),\n    ads_present: (searchResults?.ads || []).length > 0,\n    ads_count: (searchResults?.ads || []).length\n  }\n};\n\nreturn { json: extracted };"
+      },
+      "id": "extract-data",
+      "name": "Extract Competitor Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un analyste concurrentiel expert. Analyse les donnees des concurrents et produis un rapport JSON avec:\n\n- positioning: comment chaque concurrent se positionne (value proposition, ton, cible)\n- strengths: points forts identifies\n- weaknesses: faiblesses et opportunites pour nous\n- content_strategy: strategie de contenu observee\n- ad_strategy: presence publicitaire\n- actionable_insights: 5 recommandations concretes pour se differencier\n- threat_level: low/medium/high pour chaque concurrent\n\nSois factuel et base tes analyses sur les donnees fournies."
+            },
+            {
+              "role": "user",
+              "content": "=Donnees collectees sur les concurrents:\n{{ JSON.stringify($json) }}\n\nNotre positionnement: {{ $env.BUSINESS_POSITIONING || 'A definir' }}\nNotre niche: {{ $env.BUSINESS_NICHE || 'marketing digital' }}\n\nAnalyse concurrentielle complete:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "ai-analysis",
+      "name": "AI Competitor Analysis",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1120, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet analysis;\ntry {\n  analysis = JSON.parse(aiResponse);\n} catch (e) {\n  analysis = { error: 'Parse failed', raw: aiResponse };\n}\n\nreturn {\n  json: {\n    report_type: 'competitor_analysis',\n    generated_at: new Date().toISOString(),\n    agent_id: 'marketing-strategist',\n    workflow_id: 'WF-STRATEGY-COMPETITOR',\n    analysis\n  }\n};"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "marketing-strategist" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-STRATEGY-COMPETITOR" },
+            { "fieldName": "action", "fieldValue": "competitor_analysis" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log to Agent Logs",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-reports",
+        "text": "=:mag: *Analyse Concurrentielle Hebdomadaire*\n\n{{ $json.analysis.actionable_insights?.map((a, i) => `${i+1}. ${a.title || a}`).join('\\n') || 'Rapport genere - voir details en base' }}\n\n_Genere par AI Marketing Strategist_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1780, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-credentials",
+          "name": "Slack"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Monday 9AM": {
+      "main": [[{ "node": "Configure Competitors", "type": "main", "index": 0 }]]
+    },
+    "Configure Competitors": {
+      "main": [
+        [
+          { "node": "Scrape Website", "type": "main", "index": 0 },
+          { "node": "Search Competitor Mentions", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Scrape Website": {
+      "main": [[{ "node": "Extract Competitor Data", "type": "main", "index": 0 }]]
+    },
+    "Search Competitor Mentions": {
+      "main": [[{ "node": "Extract Competitor Data", "type": "main", "index": 0 }]]
+    },
+    "Extract Competitor Data": {
+      "main": [[{ "node": "AI Competitor Analysis", "type": "main", "index": 0 }]]
+    },
+    "AI Competitor Analysis": {
+      "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]]
+    },
+    "Format Report": {
+      "main": [[{ "node": "Log to Agent Logs", "type": "main", "index": 0 }]]
+    },
+    "Log to Agent Logs": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "strategy" }, { "name": "competitor" }, { "name": "agent-01" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

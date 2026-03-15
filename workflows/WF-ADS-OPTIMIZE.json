@@ -1,0 +1,200 @@
+{
+  "name": "WF-ADS-OPTIMIZE",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 4 }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Every 4 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v18.0/act_{{ $env.META_AD_ACCOUNT_ID }}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,actions,cost_per_action_type,ctr,cpc&date_preset=today&level=campaign&access_token={{ $env.META_ADS_ACCESS_TOKEN }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-meta-ads",
+      "name": "Fetch Meta Ads Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://googleads.googleapis.com/v15/customers/{{ $env.GOOGLE_ADS_CUSTOMER_ID }}/googleAds:searchStream",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"query\": \"SELECT campaign.id, campaign.name, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.cost_per_conversion FROM campaign WHERE segments.date = TODAY AND campaign.status = 'ENABLED'\" }",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-google-ads",
+      "name": "Fetch Google Ads Performance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "google-ads-credentials",
+          "name": "Google Ads API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Aggregate ad performance from all platforms\nconst metaData = $('Fetch Meta Ads Performance').item.json;\nconst googleData = $('Fetch Google Ads Performance').item.json;\n\n// Process Meta campaigns\nconst metaCampaigns = (metaData.data || []).map(c => {\n  const conversions = (c.actions || []).find(a => a.action_type === 'offsite_conversion');\n  return {\n    platform: 'meta',\n    campaign_id: c.campaign_id,\n    campaign_name: c.campaign_name,\n    spend: parseFloat(c.spend || 0),\n    impressions: parseInt(c.impressions || 0),\n    clicks: parseInt(c.clicks || 0),\n    conversions: parseInt(conversions?.value || 0),\n    ctr: parseFloat(c.ctr || 0),\n    cpc: parseFloat(c.cpc || 0),\n    cpa: conversions?.value > 0 ? parseFloat(c.spend) / parseInt(conversions.value) : null\n  };\n});\n\n// Process Google campaigns\nconst googleCampaigns = (googleData.results || []).map(r => {\n  const m = r.metrics || {};\n  return {\n    platform: 'google',\n    campaign_id: r.campaign?.id,\n    campaign_name: r.campaign?.name,\n    spend: (parseInt(m.costMicros || 0)) / 1000000,\n    impressions: parseInt(m.impressions || 0),\n    clicks: parseInt(m.clicks || 0),\n    conversions: parseFloat(m.conversions || 0),\n    ctr: m.impressions > 0 ? (m.clicks / m.impressions * 100) : 0,\n    cpc: m.clicks > 0 ? (parseInt(m.costMicros || 0) / 1000000 / m.clicks) : 0,\n    cpa: m.conversions > 0 ? (parseInt(m.costMicros || 0) / 1000000 / m.conversions) : null\n  };\n});\n\nconst allCampaigns = [...metaCampaigns, ...googleCampaigns];\nconst totalSpend = allCampaigns.reduce((sum, c) => sum + c.spend, 0);\nconst totalConversions = allCampaigns.reduce((sum, c) => sum + (c.conversions || 0), 0);\n\nreturn {\n  json: {\n    campaigns: allCampaigns,\n    summary: {\n      total_campaigns: allCampaigns.length,\n      total_spend: totalSpend,\n      total_conversions: totalConversions,\n      avg_cpa: totalConversions > 0 ? totalSpend / totalConversions : null\n    },\n    daily_budget: parseFloat($env.DAILY_AD_BUDGET || 100),\n    target_cpa: parseFloat($env.TARGET_CPA || 20)\n  }\n};"
+      },
+      "id": "aggregate-performance",
+      "name": "Aggregate Performance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un media buyer expert en optimisation de campagnes publicitaires. Analyse les performances et recommande des optimisations.\n\nRetourne un JSON avec:\n- performance_assessment: evaluation globale (excellent/good/average/poor)\n- anomalies: campagnes avec des performances anormales\n  - campaign_id, campaign_name, issue, severity (critical/warning/info)\n- optimizations: recommandations d'optimisation\n  - campaign_id, action (increase_budget|decrease_budget|pause|adjust_audience|change_creative), reason, expected_impact\n- budget_reallocation: suggestion de redistribution du budget\n  - from_campaign, to_campaign, amount, reason\n- alerts: alertes a envoyer immediatement\n- estimated_savings: economies estimees si les recommandations sont appliquees\n\nRegles:\n- Pauser les campagnes avec CPA > 2x target CPA\n- Augmenter le budget des campagnes avec CPA < 0.5x target CPA\n- Alerter si spend quotidien > budget quotidien * 1.2"
+            },
+            {
+              "role": "user",
+              "content": "=Performance des campagnes:\n{{ JSON.stringify($json) }}\n\nBudget quotidien cible: {{ $json.daily_budget }}$\nCPA cible: {{ $json.target_cpa }}$\n\nAnalyse et recommandations d'optimisation:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "ai-optimize",
+      "name": "AI Optimization Analysis",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 300],
+      "credentials": {
+        "openAiApi": { "id": "openai-credentials", "name": "OpenAI" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const perfData = $('Aggregate Performance').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet optimization;\ntry { optimization = JSON.parse(aiResponse); } catch (e) { optimization = { error: 'Parse failed' }; }\n\nreturn {\n  json: {\n    report_type: 'ads_optimization',\n    generated_at: new Date().toISOString(),\n    agent_id: 'media-buyer',\n    workflow_id: 'WF-ADS-OPTIMIZE',\n    performance_summary: perfData.summary,\n    optimization,\n    has_critical_alerts: (optimization.anomalies || []).some(a => a.severity === 'critical'),\n    has_alerts: (optimization.alerts || []).length > 0\n  }\n};"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "media-buyer" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-ADS-OPTIMIZE" },
+            { "fieldName": "action", "fieldValue": "ads_optimization" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.has_alerts }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-alerts",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "channel": "={{ $json.has_critical_alerts ? '#marketing-urgent' : '#marketing-alerts' }}",
+        "text": "=:bar_chart: *Optimisation Ads - {{ $json.optimization.performance_assessment?.toUpperCase() || 'RAPPORT' }}*\n\n*Resume:*\n- Depense totale: {{ $json.performance_summary.total_spend?.toFixed(2) }}$\n- Conversions: {{ $json.performance_summary.total_conversions }}\n- CPA moyen: {{ $json.performance_summary.avg_cpa?.toFixed(2) || 'N/A' }}$\n\n*Optimisations recommandees:*\n{{ $json.optimization.optimizations?.slice(0, 5).map((o, i) => `${i+1}. [${o.action}] ${o.reason}`).join('\\n') || 'Aucune' }}\n\n{{ $json.has_critical_alerts ? ':rotating_light: *ALERTES CRITIQUES* - Action immediate requise' : '' }}\n\n_Genere par AI Media Buyer_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1780, 300],
+      "credentials": {
+        "slackApi": { "id": "slack-credentials", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "Every 4 Hours": {
+      "main": [
+        [
+          { "node": "Fetch Meta Ads Performance", "type": "main", "index": 0 },
+          { "node": "Fetch Google Ads Performance", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Meta Ads Performance": {
+      "main": [[{ "node": "Aggregate Performance", "type": "main", "index": 0 }]]
+    },
+    "Fetch Google Ads Performance": {
+      "main": [[{ "node": "Aggregate Performance", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Performance": {
+      "main": [[{ "node": "AI Optimization Analysis", "type": "main", "index": 0 }]]
+    },
+    "AI Optimization Analysis": {
+      "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]]
+    },
+    "Format Report": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Has Alerts?", "type": "main", "index": 0 }]]
+    },
+    "Has Alerts?": {
+      "main": [[{ "node": "Notify Slack Alert", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "ads" }, { "name": "optimize" }, { "name": "agent-05" }],
+  "triggerCount": 1,
+  "pinData": {}
+}
