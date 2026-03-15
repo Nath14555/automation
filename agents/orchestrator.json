@@ -110,29 +110,36 @@
 
     "execution_order": {
       "daily": [
-        { "time": "04:00", "agent": "crm-manager", "workflow": "WF-CRM-DEDUPE" },
-        { "time": "05:00", "agent": "analytics-analyst", "workflow": "WF-ANALYTICS-COLLECT" },
-        { "time": "06:00", "agent": "seo-specialist", "workflow": "WF-SEO-TRACKING" },
-        { "time": "06:00", "agent": "analytics-analyst", "workflow": "WF-ANALYTICS-DASHBOARD" },
-        { "time": "06:00", "agent": "email-marketer", "workflow": "WF-EMAIL-SEGMENT" },
-        { "time": "07:00", "agent": "content-creator", "workflow": "WF-CONTENT-SOCIAL" },
-        { "time": "07:00", "agent": "analytics-analyst", "workflow": "WF-ANALYTICS-ATTRIBUTION" },
-        { "time": "07:00", "agent": "reputation-manager", "workflow": "WF-REPUTATION-SENTIMENT" },
-        { "time": "07:00", "agent": "retention-specialist", "workflow": "WF-RETAIN-CHURN" },
-        { "time": "08:00", "agent": "media-buyer", "workflow": "WF-ADS-BUDGET" },
-        { "time": "09:00", "agent": "media-buyer", "workflow": "WF-ADS-REPORT" },
-        { "time": "09:00", "agent": "sales-closer", "workflow": "WF-SALES-FOLLOWUP" },
-        { "time": "10:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE" },
-        { "time": "14:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE" },
-        { "time": "14:00", "agent": "sales-closer", "workflow": "WF-SALES-FOLLOWUP" },
-        { "time": "18:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE" }
+        { "time": "06:00", "agent": "crm-manager", "workflow": "WF-CRM-SCORE", "description": "Rescore leads with inactivity decay" },
+        { "time": "07:00", "agent": "content-creator", "workflow": "WF-CONTENT-SOCIAL", "description": "Generate daily social posts" },
+        { "time": "07:00", "agent": "retention-specialist", "workflow": "WF-RETAIN-CHURN", "description": "Detect churn risk and generate retention actions" },
+        { "time": "08:00", "agent": "media-buyer", "workflow": "WF-ADS-BUDGET", "description": "Optimize ad budgets" },
+        { "time": "08:00", "agent": "email-marketer", "workflow": "WF-EMAIL-NEWSLETTER", "description": "Weekly newsletter (Thursday only)" },
+        { "time": "09:00", "agent": "media-buyer", "workflow": "WF-ADS-REPORT", "description": "Daily ads performance report" },
+        { "time": "09:00", "agent": "sales-closer", "workflow": "WF-SALES-FOLLOWUP", "description": "Follow up warm/hot leads" },
+        { "time": "10:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE", "description": "Morning engagement session" },
+        { "time": "14:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE", "description": "Afternoon engagement session" },
+        { "time": "18:00", "agent": "community-manager", "workflow": "WF-COMMUNITY-ENGAGE", "description": "Evening engagement session" }
+      ],
+      "weekly": [
+        { "day": "monday", "time": "06:00", "agent": "seo-specialist", "workflow": "WF-SEO-AUDIT", "description": "Technical SEO audit" },
+        { "day": "monday", "time": "07:00", "agent": "seo-specialist", "workflow": "WF-SEO-KEYWORDS", "description": "Keyword research & tracking" },
+        { "day": "monday", "time": "08:00", "agent": "marketing-strategist", "workflow": "WF-STRATEGY-TRENDS", "description": "Weekly trends analysis" },
+        { "day": "monday", "time": "08:00", "agent": "analytics-analyst", "workflow": "WF-ANALYTICS-REPORT", "description": "Weekly analytics report" },
+        { "day": "monday", "time": "09:00", "agent": "marketing-strategist", "workflow": "WF-STRATEGY-COMPETITOR", "description": "Competitor analysis" },
+        { "day": "monday", "time": "08:00", "agent": "content-creator", "workflow": "WF-CONTENT-BLOG", "description": "Weekly SEO blog article" },
+        { "day": "friday", "time": "09:00", "agent": "content-creator", "workflow": "WF-CONTENT-CALENDAR", "description": "Plan next week's editorial calendar" }
       ],
       "realtime": [
-        "community-manager: WF-INGEST-META, WF-INGEST-TIKTOK, WF-INGEST-GMAIL",
-        "community-manager: WF-COMMUNITY-COMMENTS, WF-COMMUNITY-MODERATE",
-        "reputation-manager: WF-REPUTATION-REVIEW",
-        "sales-closer: WF-SALES-QUALIFY",
-        "crm-manager: WF-CRM-ENRICH, WF-CRM-SCORE"
+        { "trigger": "webhook", "agent": "community-manager", "workflow": "WF-COMMUNITY-COMMENTS", "description": "Respond to social media comments" },
+        { "trigger": "webhook", "agent": "reputation-manager", "workflow": "WF-REPUTATION-REVIEW", "description": "Respond to online reviews" },
+        { "trigger": "workflow_call", "agent": "sales-closer", "workflow": "WF-SALES-QUALIFY", "description": "Score and qualify new leads" },
+        { "trigger": "workflow_call", "agent": "onboarding-specialist", "workflow": "WF-ONBOARD-WELCOME", "description": "Onboard new members" },
+        { "trigger": "workflow_call", "agent": "email-marketer", "workflow": "WF-EMAIL-SEQUENCE", "description": "Trigger email sequences" },
+        { "trigger": "webhook", "agent": "marketing-strategist", "workflow": "WF-STRATEGY-BRIEF", "description": "Generate campaign briefs on demand" }
+      ],
+      "every_4_hours": [
+        { "agent": "media-buyer", "workflow": "WF-ADS-OPTIMIZE", "description": "Optimize ad campaigns" }
       ]
     },
 

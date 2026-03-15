@@ -1,0 +1,127 @@
+{
+  "name": "WF-SALES-QUALIFY",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Score the lead based on available data\nconst lead = $input.item.json;\nlet score = 0;\nconst signals = [];\n\n// Source scoring\nconst sourceScores = { 'meta_ad': 20, 'instagram_dm': 25, 'tiktok': 15, 'google_ad': 30, 'referral': 35, 'organic': 20, 'email': 15, 'event': 30 };\nscore += sourceScores[lead.source] || 10;\nsignals.push(`Source: ${lead.source} (+${sourceScores[lead.source] || 10})`);\n\n// Intent scoring\nconst message = (lead.message || '').toLowerCase();\nif (message.includes('prix') || message.includes('tarif') || message.includes('combien')) { score += 25; signals.push('Intent: pricing inquiry (+25)'); }\nif (message.includes('reserver') || message.includes('inscription') || message.includes('essayer')) { score += 30; signals.push('Intent: booking intent (+30)'); }\nif (message.includes('membership') || message.includes('abonnement') || message.includes('forfait')) { score += 35; signals.push('Intent: membership interest (+35)'); }\nif (message.includes('pilates') || message.includes('reformer')) { score += 15; signals.push('Intent: pilates interest (+15)'); }\nif (message.includes('evenement') || message.includes('brunch') || message.includes('soiree')) { score += 20; signals.push('Intent: event interest (+20)'); }\n\n// Engagement scoring\nif (lead.message_count > 3) { score += 15; signals.push('Engagement: multi-message (+15)'); }\nif (lead.message_count > 7) { score += 10; signals.push('Engagement: highly engaged (+10)'); }\n\n// Cap at 100\nscore = Math.min(score, 100);\n\n// Qualification\nlet qualification = 'cold';\nif (score >= 60) qualification = 'hot';\nelse if (score >= 35) qualification = 'warm';\n\n// Next action\nlet nextAction = 'nurture';\nif (qualification === 'hot') nextAction = 'offer_trial_now';\nelse if (qualification === 'warm') nextAction = 'educate_and_engage';\n\nreturn {\n  json: {\n    ...lead,\n    lead_score: score,\n    qualification,\n    scoring_signals: signals,\n    next_action: nextAction,\n    qualified_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "score-lead",
+      "name": "Score Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "tableId": "leads",
+        "filterType": "string",
+        "filterString": "email=eq.{{ $json.sender_id }}",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "source", "fieldValue": "={{ $json.source }}" },
+            { "fieldName": "first_name", "fieldValue": "={{ $json.sender_name?.split(' ')[0] || '' }}" },
+            { "fieldName": "last_name", "fieldValue": "={{ $json.sender_name?.split(' ').slice(1).join(' ') || '' }}" },
+            { "fieldName": "lead_score", "fieldValue": "={{ $json.lead_score }}" },
+            { "fieldName": "qualification", "fieldValue": "={{ $json.qualification }}" },
+            { "fieldName": "lifecycle_stage", "fieldValue": "={{ $json.qualification === 'hot' ? 'mql' : 'lead' }}" },
+            { "fieldName": "tags", "fieldValue": "={{ JSON.stringify($json.scoring_signals) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-lead",
+      "name": "Save/Update Lead",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $json.qualification }}", "rightValue": "hot", "operator": { "type": "string", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-hot",
+      "name": "Is Hot Lead?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "channel": "#wellness-sales",
+        "text": "=:fire: *Lead HOT detecte!*\n\nNom: {{ $json.sender_name }}\nSource: {{ $json.source }}\nScore: {{ $json.lead_score }}/100\nMessage: \"{{ $json.message?.substring(0, 100) }}\"\n\nAction: {{ $json.next_action }}\n\n_Qualifie par AI Sales Closer_",
+        "otherOptions": {}
+      },
+      "id": "notify-hot",
+      "name": "Alert Hot Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1120, 200],
+      "credentials": { "slackApi": { "id": "slack-credentials", "name": "Slack" } }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "sales-closer" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-SALES-QUALIFY" },
+            { "fieldName": "action", "fieldValue": "lead_qualification" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ score: $json.lead_score, qualification: $json.qualification, next: $json.next_action }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [900, 400],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [{ "id": "output", "name": "output", "value": "={{ $json }}", "type": "object" }]
+        },
+        "options": {}
+      },
+      "id": "return-output",
+      "name": "Return",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Score Lead", "type": "main", "index": 0 }]] },
+    "Score Lead": { "main": [[{ "node": "Save/Update Lead", "type": "main", "index": 0 }]] },
+    "Save/Update Lead": { "main": [[{ "node": "Is Hot Lead?", "type": "main", "index": 0 }, { "node": "Log Action", "type": "main", "index": 0 }]] },
+    "Is Hot Lead?": { "main": [[{ "node": "Alert Hot Lead", "type": "main", "index": 0 }]] },
+    "Log Action": { "main": [[{ "node": "Return", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "sales" }, { "name": "qualify" }, { "name": "agent-07" }],
+  "triggerCount": 0,
+  "pinData": {}
+}

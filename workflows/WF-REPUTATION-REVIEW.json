@@ -1,0 +1,112 @@
+{
+  "name": "WF-REPUTATION-REVIEW",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "webhook/review", "options": {} },
+      "id": "webhook-trigger",
+      "name": "Webhook New Review",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "reputation-review"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\nreturn {\n  json: {\n    platform: body.platform || 'google',\n    reviewer_name: body.reviewer_name || body.author_name || 'Anonymous',\n    rating: parseInt(body.rating || body.stars || 5),\n    content: body.content || body.text || body.review_text || '',\n    review_date: body.review_date || new Date().toISOString()\n  }\n};"
+      },
+      "id": "normalize-review",
+      "name": "Normalize Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es le reputation manager d'un club social wellness a Montreal. Tu reponds aux avis en ligne.\n\nRetourne un JSON avec:\n- sentiment: positive|neutral|negative\n- response: reponse a l'avis (2-4 phrases, chaleureuse et professionnelle)\n- priority: low|medium|high\n- should_escalate: true si plainte grave\n- internal_note: note interne pour l'equipe\n\nRegles:\n- Avis positif (4-5 etoiles): remercier, mentionner un detail specifique, inviter a revenir\n- Avis neutre (3 etoiles): remercier, adresser les points, proposer d'ameliorer l'experience\n- Avis negatif (1-2 etoiles): empathie d'abord, s'excuser, proposer de regler en prive\n- Toujours signer avec le prenom du manager\n- Ne jamais etre defensif\n- Tutoiement pour les reponses chaleureuses"
+            },
+            {
+              "role": "user",
+              "content": "=Plateforme: {{ $json.platform }}\nNote: {{ $json.rating }}/5\nAuteur: {{ $json.reviewer_name }}\nAvis: \"{{ $json.content }}\"\n\nGenere la reponse:"
+            }
+          ]
+        },
+        "options": { "temperature": 0.5, "responseFormat": "json_object" }
+      },
+      "id": "generate-response",
+      "name": "AI Generate Response",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": { "openAiApi": { "id": "openai-credentials", "name": "OpenAI" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const review = $('Normalize Review').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet response;\ntry { response = JSON.parse(aiResponse); } catch (e) { response = { response: 'Merci pour ton avis!', sentiment: 'neutral' }; }\n\nreturn {\n  json: { ...review, ...response, agent_id: 'reputation-manager', workflow_id: 'WF-REPUTATION-REVIEW' }\n};"
+      },
+      "id": "merge-data",
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": { "operation": "insert", "tableId": "reviews", "dataToSend": "defineBelow", "fieldsUi": { "fieldValues": [{ "fieldName": "platform", "fieldValue": "={{ $json.platform }}" }, { "fieldName": "reviewer_name", "fieldValue": "={{ $json.reviewer_name }}" }, { "fieldName": "rating", "fieldValue": "={{ $json.rating }}" }, { "fieldName": "content", "fieldValue": "={{ $json.content }}" }, { "fieldName": "response", "fieldValue": "={{ $json.response }}" }, { "fieldName": "response_status", "fieldValue": "responded" }, { "fieldName": "sentiment", "fieldValue": "={{ $json.sentiment }}" }, { "fieldName": "review_date", "fieldValue": "={{ $json.review_date }}" }, { "fieldName": "responded_at", "fieldValue": "={{ $now.toISO() }}" }] }, "options": {} },
+      "id": "save-review",
+      "name": "Save Review",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": { "operation": "insert", "tableId": "agent_logs", "dataToSend": "defineBelow", "fieldsUi": { "fieldValues": [{ "fieldName": "agent_id", "fieldValue": "reputation-manager" }, { "fieldName": "workflow_id", "fieldValue": "WF-REPUTATION-REVIEW" }, { "fieldName": "action", "fieldValue": "review_response" }, { "fieldName": "status", "fieldValue": "completed" }, { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ platform: $json.platform, rating: $json.rating, sentiment: $json.sentiment }) }}" }] }, "options": {} },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "channel": "={{ $json.rating <= 2 ? '#wellness-alerts' : '#wellness-reports' }}",
+        "text": "=:star: *Nouvel avis {{ $json.platform }} - {{ $json.rating }}/5*\n\nDe: {{ $json.reviewer_name }}\n\"{{ $json.content?.substring(0, 150) }}\"\n\n*Reponse generee:*\n\"{{ $json.response?.substring(0, 200) }}\"\n\n{{ $json.should_escalate ? ':rotating_light: ESCALADE REQUISE' : '' }}\n\n_Genere par AI Reputation Manager_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 300],
+      "credentials": { "slackApi": { "id": "slack-credentials", "name": "Slack" } }
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify({ status: 'processed', review_id: $('Save Review').item.json.id }) }}", "options": {} },
+      "id": "respond-webhook",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook New Review": { "main": [[{ "node": "Normalize Review", "type": "main", "index": 0 }]] },
+    "Normalize Review": { "main": [[{ "node": "AI Generate Response", "type": "main", "index": 0 }]] },
+    "AI Generate Response": { "main": [[{ "node": "Merge Data", "type": "main", "index": 0 }]] },
+    "Merge Data": { "main": [[{ "node": "Save Review", "type": "main", "index": 0 }]] },
+    "Save Review": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] },
+    "Log Action": { "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }, { "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "reputation" }, { "name": "reviews" }, { "name": "agent-10" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

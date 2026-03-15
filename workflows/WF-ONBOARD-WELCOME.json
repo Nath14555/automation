@@ -1,0 +1,91 @@
+{
+  "name": "WF-ONBOARD-WELCOME",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es le specialiste onboarding d'un club social wellness a Montreal. Tu crees une experience d'accueil memorable pour les nouveaux membres.\n\nGenere un JSON avec:\n- welcome_dm: message de bienvenue pour DM Instagram/Messenger (court, chaleureux, emoji)\n- welcome_email: email d'onboarding complet avec:\n  - subject, html_body (guide du nouveau membre: comment reserver, quoi apporter, FAQ)\n- day1_checkin: message de check-in J+1 (comment s'est passe le premier cours?)\n- day7_checkin: message J+7 (progression, prochain event)\n- day30_checkin: message J+30 (celebration du premier mois)\n- recommended_classes: 3 cours recommandes pour un debutant\n- upcoming_events: suggestion d'evenement social pour s'integrer\n\nTon: comme un ami qui accueille quelqu'un dans son cercle. Tutoiement, emojis moderes."
+            },
+            {
+              "role": "user",
+              "content": "=Nouveau membre:\n- Prenom: {{ $json.first_name || 'ami(e)' }}\n- Source: {{ $json.source || 'unknown' }}\n- Interests: {{ $json.interests || 'pilates' }}\n- Type membership: {{ $json.membership_type || 'standard' }}\n\nGenere l'experience d'onboarding complete:"
+            }
+          ]
+        },
+        "options": { "temperature": 0.7, "responseFormat": "json_object" }
+      },
+      "id": "generate-onboarding",
+      "name": "AI Generate Onboarding",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [460, 300],
+      "credentials": { "openAiApi": { "id": "openai-credentials", "name": "OpenAI" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const member = $('Execute Workflow Trigger').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet onboarding;\ntry { onboarding = JSON.parse(aiResponse); } catch (e) { onboarding = { welcome_dm: 'Bienvenue dans le club!' }; }\n\n// Update lead to customer stage\nreturn {\n  json: {\n    ...member,\n    onboarding,\n    lifecycle_stage: 'customer',\n    agent_id: 'onboarding-specialist',\n    workflow_id: 'WF-ONBOARD-WELCOME'\n  }\n};"
+      },
+      "id": "format-onboarding",
+      "name": "Format Onboarding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": { "operation": "update", "tableId": "leads", "filterType": "string", "filterString": "email=eq.{{ $json.email || $json.sender_id }}", "dataToSend": "defineBelow", "fieldsUi": { "fieldValues": [{ "fieldName": "lifecycle_stage", "fieldValue": "customer" }, { "fieldName": "tags", "fieldValue": "={{ JSON.stringify(['member', 'onboarded', $json.membership_type || 'standard']) }}" }] }, "options": {} },
+      "id": "update-lead",
+      "name": "Update to Customer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": { "operation": "insert", "tableId": "agent_logs", "dataToSend": "defineBelow", "fieldsUi": { "fieldValues": [{ "fieldName": "agent_id", "fieldValue": "onboarding-specialist" }, { "fieldName": "workflow_id", "fieldValue": "WF-ONBOARD-WELCOME" }, { "fieldName": "action", "fieldValue": "new_member_onboarding" }, { "fieldName": "status", "fieldValue": "completed" }, { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ member: $json.first_name, source: $json.source }) }}" }] }, "options": {} },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "channel": "#wellness-sales",
+        "text": "=:tada: *Nouveau membre onboarde!*\n\nPrenom: {{ $json.first_name || 'N/A' }}\nSource: {{ $json.source }}\nMembership: {{ $json.membership_type || 'standard' }}\n\nSequence d'onboarding lancee (J+1, J+7, J+30)\n\n_Genere par AI Onboarding Specialist_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1340, 300],
+      "credentials": { "slackApi": { "id": "slack-credentials", "name": "Slack" } }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "AI Generate Onboarding", "type": "main", "index": 0 }]] },
+    "AI Generate Onboarding": { "main": [[{ "node": "Format Onboarding", "type": "main", "index": 0 }]] },
+    "Format Onboarding": { "main": [[{ "node": "Update to Customer", "type": "main", "index": 0 }]] },
+    "Update to Customer": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] },
+    "Log Action": { "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "onboarding" }, { "name": "welcome" }, { "name": "agent-11" }],
+  "triggerCount": 0,
+  "pinData": {}
+}

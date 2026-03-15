@@ -1,0 +1,160 @@
+{
+  "name": "WF-EMAIL-SEQUENCE",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Determine which email sequence to trigger\nconst input = $input.item.json;\nconst sequenceType = input.sequence_type || 'new_lead';\n\nconst sequences = {\n  new_lead: {\n    name: 'Bienvenue - Cours Decouverte',\n    emails: [\n      { day: 0, subject: 'Bienvenue dans la communaute wellness!', type: 'welcome', delay_hours: 0 },\n      { day: 1, subject: 'Pourquoi le Pilates va changer ta vie', type: 'educate', delay_hours: 24 },\n      { day: 3, subject: 'Ce que nos membres disent...', type: 'social_proof', delay_hours: 72 },\n      { day: 5, subject: 'Ton cours decouverte t\\'attend', type: 'offer', delay_hours: 120 },\n      { day: 7, subject: 'Derniere chance - Cours decouverte offert', type: 'urgency', delay_hours: 168 }\n    ]\n  },\n  post_trial: {\n    name: 'Post Cours Decouverte',\n    emails: [\n      { day: 0, subject: 'Comment c\\'etait ton premier cours?', type: 'feedback', delay_hours: 4 },\n      { day: 2, subject: 'Ton corps te remercie deja', type: 'benefits', delay_hours: 48 },\n      { day: 5, subject: 'Offre speciale membership - juste pour toi', type: 'membership_offer', delay_hours: 120 },\n      { day: 10, subject: 'On a garde ta place...', type: 'last_chance', delay_hours: 240 }\n    ]\n  },\n  new_member: {\n    name: 'Onboarding Nouveau Membre',\n    emails: [\n      { day: 0, subject: 'Bienvenue dans le club! Voici ton guide', type: 'onboard_welcome', delay_hours: 0 },\n      { day: 1, subject: 'Comment tirer le max de ton membership', type: 'onboard_tips', delay_hours: 24 },\n      { day: 3, subject: 'As-tu essaye notre cours Reformer?', type: 'onboard_explore', delay_hours: 72 },\n      { day: 7, subject: 'Ta premiere semaine - bravo!', type: 'onboard_celebrate', delay_hours: 168 },\n      { day: 14, subject: 'Le prochain evenement parfait pour toi', type: 'onboard_event', delay_hours: 336 },\n      { day: 30, subject: 'Un mois deja! Comment tu te sens?', type: 'onboard_checkin', delay_hours: 720 }\n    ]\n  },\n  inactive: {\n    name: 'Reengagement Membre Inactif',\n    emails: [\n      { day: 0, subject: 'Tu nous manques...', type: 'miss_you', delay_hours: 0 },\n      { day: 3, subject: 'Un nouveau cours qui pourrait te plaire', type: 'new_offering', delay_hours: 72 },\n      { day: 7, subject: 'Offre speciale pour ton retour', type: 'comeback_offer', delay_hours: 168 }\n    ]\n  },\n  event_promo: {\n    name: 'Promotion Evenement',\n    emails: [\n      { day: 0, subject: 'Save the date - {{ event_name }}', type: 'event_announce', delay_hours: 0 },\n      { day: 7, subject: 'Plus que quelques places - {{ event_name }}', type: 'event_reminder', delay_hours: 168 },\n      { day: 13, subject: 'C\\'est demain! Es-tu pret(e)?', type: 'event_eve', delay_hours: 312 }\n    ]\n  }\n};\n\nconst selectedSequence = sequences[sequenceType] || sequences.new_lead;\nconst currentEmail = selectedSequence.emails[input.email_index || 0];\n\nreturn {\n  json: {\n    ...input,\n    sequence: selectedSequence,\n    current_email: currentEmail,\n    sequence_type: sequenceType,\n    total_emails: selectedSequence.emails.length,\n    current_index: input.email_index || 0\n  }\n};"
+      },
+      "id": "select-sequence",
+      "name": "Select Email Sequence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es l'email marketer d'un club social wellness a Montreal specialise en pilates et evenements.\n\nGenere un email HTML simple et elegant. Retourne un JSON avec:\n- subject: objet de l'email (personnalise avec le prenom si dispo)\n- preview_text: texte de previsualisation (40-90 caracteres)\n- html_body: corps HTML de l'email\n- plain_text: version texte brut\n- cta_text: texte du bouton CTA\n- cta_url: URL du CTA (utilise {{ booking_url }} ou {{ membership_url }} comme placeholder)\n\nRegles de style:\n- Tutoiement toujours\n- Ton chaleureux et motivant\n- Emojis moderes (1-2 par email)\n- Court: 150-250 mots max\n- Un seul CTA clair\n- Pas de body-shaming\n- Signature: L'equipe [Nom du club]\n- Design: clean, tons neutres/beiges, minimaliste"
+            },
+            {
+              "role": "user",
+              "content": "=Sequence: {{ $json.sequence.name }}\nEmail #{{ $json.current_index + 1 }}/{{ $json.total_emails }}\nType: {{ $json.current_email.type }}\nSujet suggere: {{ $json.current_email.subject }}\n\nDestinataire:\n- Prenom: {{ $json.first_name || 'ami(e)' }}\n- Source: {{ $json.source || 'inconnu' }}\n- Stage: {{ $json.lifecycle_stage || 'lead' }}\n\nGenere l'email complet:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-email",
+      "name": "AI Generate Email",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": { "id": "openai-credentials", "name": "OpenAI" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $('Select Email Sequence').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet email;\ntry { email = JSON.parse(aiResponse); } catch (e) { email = { subject: input.current_email.subject, html_body: aiResponse }; }\n\nreturn {\n  json: {\n    to: input.email,\n    subject: email.subject,\n    preview_text: email.preview_text,\n    html_body: email.html_body,\n    plain_text: email.plain_text,\n    cta_text: email.cta_text,\n    cta_url: email.cta_url,\n    sequence_type: input.sequence_type,\n    email_index: input.current_index,\n    lead_id: input.lead_id || input.sender_id,\n    agent_id: 'email-marketer',\n    workflow_id: 'WF-EMAIL-SEQUENCE'\n  }\n};"
+      },
+      "id": "format-email",
+      "name": "Format Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html_body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1120, 300],
+      "credentials": {
+        "gmailOAuth2": { "id": "gmail-credentials", "name": "Gmail OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "email_campaigns",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "name", "fieldValue": "={{ $json.sequence_type }}_email_{{ $json.email_index }}" },
+            { "fieldName": "campaign_type", "fieldValue": "sequence" },
+            { "fieldName": "subject_line", "fieldValue": "={{ $json.subject }}" },
+            { "fieldName": "segment", "fieldValue": "={{ $json.sequence_type }}" },
+            { "fieldName": "status", "fieldValue": "sent" },
+            { "fieldName": "sent_at", "fieldValue": "={{ $now.toISO() }}" },
+            { "fieldName": "segment_size", "fieldValue": "1" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-email",
+      "name": "Log Email Sent",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "email-marketer" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-EMAIL-SEQUENCE" },
+            { "fieldName": "action", "fieldValue": "send_sequence_email" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ to: $json.to, sequence: $json.sequence_type, index: $json.email_index, subject: $json.subject }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [[{ "node": "Select Email Sequence", "type": "main", "index": 0 }]]
+    },
+    "Select Email Sequence": {
+      "main": [[{ "node": "AI Generate Email", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Email": {
+      "main": [[{ "node": "Format Email", "type": "main", "index": 0 }]]
+    },
+    "Format Email": {
+      "main": [[{ "node": "Send Email", "type": "main", "index": 0 }]]
+    },
+    "Send Email": {
+      "main": [[{ "node": "Log Email Sent", "type": "main", "index": 0 }]]
+    },
+    "Log Email Sent": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "email" }, { "name": "sequence" }, { "name": "agent-06" }],
+  "triggerCount": 0,
+  "pinData": {}
+}

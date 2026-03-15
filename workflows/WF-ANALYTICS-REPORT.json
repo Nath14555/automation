@@ -1,0 +1,133 @@
+{
+  "name": "WF-ANALYTICS-REPORT",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "triggerAtHour": 8, "triggerAtDay": 1 }] } },
+      "id": "cron-trigger",
+      "name": "Weekly Monday 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": { "operation": "select", "tableId": "agent_logs", "filterType": "string", "filterString": "created_at=gte.{{ new Date(Date.now() - 7*24*60*60*1000).toISOString() }}", "options": {} },
+      "id": "fetch-agent-activity",
+      "name": "Fetch Agent Activity",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 150],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": { "operation": "select", "tableId": "leads", "filterType": "string", "filterString": "created_at=gte.{{ new Date(Date.now() - 7*24*60*60*1000).toISOString() }}", "options": {} },
+      "id": "fetch-leads",
+      "name": "Fetch New Leads",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": { "operation": "select", "tableId": "conversations", "filterType": "string", "filterString": "created_at=gte.{{ new Date(Date.now() - 7*24*60*60*1000).toISOString() }}", "options": {} },
+      "id": "fetch-conversations",
+      "name": "Fetch Conversations",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 450],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": { "operation": "select", "tableId": "booking_logs", "filterType": "string", "filterString": "created_at=gte.{{ new Date(Date.now() - 7*24*60*60*1000).toISOString() }}", "options": {} },
+      "id": "fetch-bookings",
+      "name": "Fetch Bookings",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 600],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const agentLogs = $('Fetch Agent Activity').all() || [];\nconst leads = $('Fetch New Leads').all() || [];\nconst conversations = $('Fetch Conversations').all() || [];\nconst bookings = $('Fetch Bookings').all() || [];\n\n// Aggregate metrics\nconst agentBreakdown = {};\nfor (const log of agentLogs) {\n  const aid = log.json.agent_id;\n  if (!agentBreakdown[aid]) agentBreakdown[aid] = { total: 0, completed: 0, failed: 0 };\n  agentBreakdown[aid].total++;\n  if (log.json.status === 'completed') agentBreakdown[aid].completed++;\n  if (log.json.status === 'failed') agentBreakdown[aid].failed++;\n}\n\nconst leadsBySource = {};\nfor (const l of leads) {\n  const src = l.json.source || 'unknown';\n  leadsBySource[src] = (leadsBySource[src] || 0) + 1;\n}\n\nconst bookingsByStatus = {};\nfor (const b of bookings) {\n  const st = b.json.booking_status || 'unknown';\n  bookingsByStatus[st] = (bookingsByStatus[st] || 0) + 1;\n}\n\nreturn {\n  json: {\n    period: { start: new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] },\n    metrics: {\n      total_agent_actions: agentLogs.length,\n      new_leads: leads.length,\n      new_conversations: conversations.length,\n      total_bookings: bookings.length,\n      confirmed_bookings: bookingsByStatus['confirmed'] || 0\n    },\n    agent_breakdown: agentBreakdown,\n    leads_by_source: leadsBySource,\n    bookings_by_status: bookingsByStatus,\n    conversion_rate: leads.length > 0 ? ((bookingsByStatus['confirmed'] || 0) / leads.length * 100).toFixed(1) : 0\n  }\n};"
+      },
+      "id": "aggregate-metrics",
+      "name": "Aggregate Weekly Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es l'analyste marketing d'un club social wellness a Montreal. Analyse les metriques hebdomadaires et produis un rapport JSON avec:\n\n- executive_summary: resume en 3 phrases\n- kpi_dashboard: tableau de KPIs avec valeur, tendance (up/down/stable), status (on_track/at_risk/off_track)\n- agent_performance: performance de chaque agent AI\n- lead_analysis: analyse des leads par source, qualite, conversion\n- booking_analysis: analyse des reservations\n- top_wins: 3 victoires de la semaine\n- concerns: points d'attention\n- recommendations: 5 recommandations actionnables pour la semaine prochaine\n- growth_score: score de croissance sur 10\n\nSois data-driven, concis, et oriente action."
+            },
+            {
+              "role": "user",
+              "content": "=Metriques de la semaine:\n{{ JSON.stringify($json) }}\n\nGenere le rapport hebdomadaire:"
+            }
+          ]
+        },
+        "options": { "temperature": 0.3, "responseFormat": "json_object" }
+      },
+      "id": "ai-report",
+      "name": "AI Weekly Report",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 400],
+      "credentials": { "openAiApi": { "id": "openai-credentials", "name": "OpenAI" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const metrics = $('Aggregate Weekly Metrics').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet report;\ntry { report = JSON.parse(aiResponse); } catch (e) { report = { executive_summary: 'Report generation failed' }; }\n\nreturn { json: { report_type: 'weekly_analytics', generated_at: new Date().toISOString(), agent_id: 'analytics-analyst', workflow_id: 'WF-ANALYTICS-REPORT', metrics: metrics.metrics, report } };"
+      },
+      "id": "format-report",
+      "name": "Format Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": { "operation": "insert", "tableId": "agent_logs", "dataToSend": "defineBelow", "fieldsUi": { "fieldValues": [{ "fieldName": "agent_id", "fieldValue": "analytics-analyst" }, { "fieldName": "workflow_id", "fieldValue": "WF-ANALYTICS-REPORT" }, { "fieldName": "action", "fieldValue": "weekly_report" }, { "fieldName": "status", "fieldValue": "completed" }, { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json) }}" }] }, "options": {} },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 400],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "channel": "#wellness-reports",
+        "text": "=:bar_chart: *Rapport Hebdomadaire Wellness*\n\n{{ $json.report.executive_summary }}\n\n*KPIs:*\n- Nouveaux leads: {{ $json.metrics.new_leads }}\n- Conversations: {{ $json.metrics.new_conversations }}\n- Bookings confirmes: {{ $json.metrics.confirmed_bookings }}\n- Taux de conversion: {{ $json.metrics.conversion_rate || 0 }}%\n- Score de croissance: {{ $json.report.growth_score }}/10\n\n*Top 3 recommandations:*\n{{ $json.report.recommendations?.slice(0, 3).map((r, i) => `${i+1}. ${r.title || r}`).join('\\n') }}\n\n_Genere par AI Analytics Analyst_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 400],
+      "credentials": { "slackApi": { "id": "slack-credentials", "name": "Slack" } }
+    }
+  ],
+  "connections": {
+    "Weekly Monday 8AM": { "main": [[{ "node": "Fetch Agent Activity", "type": "main", "index": 0 }, { "node": "Fetch New Leads", "type": "main", "index": 0 }, { "node": "Fetch Conversations", "type": "main", "index": 0 }, { "node": "Fetch Bookings", "type": "main", "index": 0 }]] },
+    "Fetch Agent Activity": { "main": [[{ "node": "Aggregate Weekly Metrics", "type": "main", "index": 0 }]] },
+    "Fetch New Leads": { "main": [[{ "node": "Aggregate Weekly Metrics", "type": "main", "index": 0 }]] },
+    "Fetch Conversations": { "main": [[{ "node": "Aggregate Weekly Metrics", "type": "main", "index": 0 }]] },
+    "Fetch Bookings": { "main": [[{ "node": "Aggregate Weekly Metrics", "type": "main", "index": 0 }]] },
+    "Aggregate Weekly Metrics": { "main": [[{ "node": "AI Weekly Report", "type": "main", "index": 0 }]] },
+    "AI Weekly Report": { "main": [[{ "node": "Format Report", "type": "main", "index": 0 }]] },
+    "Format Report": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] },
+    "Log Action": { "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "analytics" }, { "name": "report" }, { "name": "agent-08" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

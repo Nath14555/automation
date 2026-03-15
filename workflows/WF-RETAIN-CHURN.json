@@ -1,0 +1,115 @@
+{
+  "name": "WF-RETAIN-CHURN",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "triggerAtHour": 7 }] } },
+      "id": "cron-trigger",
+      "name": "Daily 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": { "operation": "select", "tableId": "leads", "filterType": "string", "filterString": "lifecycle_stage=eq.customer", "options": {} },
+      "id": "fetch-members",
+      "name": "Fetch All Members",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const members = $('Fetch All Members').all() || [];\nconst atRisk = [];\nconst healthy = [];\n\nfor (const member of members) {\n  const m = member.json;\n  const daysSinceUpdate = Math.floor((Date.now() - new Date(m.updated_at || m.created_at).getTime()) / (24*60*60*1000));\n  \n  let healthScore = 100;\n  let riskLevel = 'low';\n  const signals = [];\n  \n  // Inactivity decay\n  if (daysSinceUpdate > 7) { healthScore -= 15; signals.push('7+ jours sans activite'); }\n  if (daysSinceUpdate > 14) { healthScore -= 20; signals.push('14+ jours sans activite'); }\n  if (daysSinceUpdate > 21) { healthScore -= 25; signals.push('21+ jours sans activite'); }\n  if (daysSinceUpdate > 30) { healthScore -= 30; signals.push('30+ jours - risque churn eleve'); }\n  \n  // Determine risk level\n  if (healthScore <= 30) riskLevel = 'critical';\n  else if (healthScore <= 50) riskLevel = 'high';\n  else if (healthScore <= 70) riskLevel = 'medium';\n  \n  if (riskLevel !== 'low') {\n    atRisk.push({\n      id: m.id,\n      first_name: m.first_name,\n      email: m.email,\n      health_score: healthScore,\n      risk_level: riskLevel,\n      days_inactive: daysSinceUpdate,\n      signals\n    });\n  } else {\n    healthy.push(m.id);\n  }\n}\n\nreturn {\n  json: {\n    date: new Date().toISOString().split('T')[0],\n    total_members: members.length,\n    healthy_count: healthy.length,\n    at_risk_count: atRisk.length,\n    critical: atRisk.filter(m => m.risk_level === 'critical').length,\n    high: atRisk.filter(m => m.risk_level === 'high').length,\n    medium: atRisk.filter(m => m.risk_level === 'medium').length,\n    at_risk_members: atRisk.slice(0, 20)\n  }\n};"
+      },
+      "id": "detect-churn",
+      "name": "Detect Churn Risk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.at_risk_count }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }], "combinator": "and" },
+        "options": {}
+      },
+      "id": "filter-has-risk",
+      "name": "Has At-Risk Members?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es le retention specialist d'un club social wellness a Montreal. Tu crees des strategies de retention pour les membres a risque.\n\nRetourne un JSON avec un tableau 'retention_actions' pour chaque membre a risque:\n- member_id: id du membre\n- member_name: prenom\n- risk_level: niveau de risque\n- action: dm_personal|email_winback|offer_pause|offer_downgrade|call_personal|event_invite\n- message: message personnalise (chaleureux, jamais culpabilisant, tutoiement)\n- offer: offre speciale si applicable (cours gratuit, pause membership, etc.)\n- urgency: immediate|this_week|next_week\n\nStrategies par risque:\n- Medium: invitation a un event + message bienveillant\n- High: offre speciale (cours gratuit, session privee) + message personnel\n- Critical: appel personnel + offre de pause membership plutot qu'annulation"
+            },
+            {
+              "role": "user",
+              "content": "=Membres a risque:\n{{ JSON.stringify($json.at_risk_members) }}\n\nGenere les actions de retention:"
+            }
+          ]
+        },
+        "options": { "temperature": 0.6, "responseFormat": "json_object" }
+      },
+      "id": "ai-retention",
+      "name": "AI Retention Strategy",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1120, 300],
+      "credentials": { "openAiApi": { "id": "openai-credentials", "name": "OpenAI" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const churnData = $('Detect Churn Risk').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet retention;\ntry { retention = JSON.parse(aiResponse); } catch (e) { retention = { retention_actions: [] }; }\n\nreturn {\n  json: {\n    report_type: 'churn_detection',\n    date: churnData.date,\n    agent_id: 'retention-specialist',\n    workflow_id: 'WF-RETAIN-CHURN',\n    summary: { total: churnData.total_members, healthy: churnData.healthy_count, at_risk: churnData.at_risk_count, critical: churnData.critical, high: churnData.high, medium: churnData.medium },\n    actions: retention.retention_actions || []\n  }\n};"
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": { "operation": "insert", "tableId": "agent_logs", "dataToSend": "defineBelow", "fieldsUi": { "fieldValues": [{ "fieldName": "agent_id", "fieldValue": "retention-specialist" }, { "fieldName": "workflow_id", "fieldValue": "WF-RETAIN-CHURN" }, { "fieldName": "action", "fieldValue": "churn_detection" }, { "fieldName": "status", "fieldValue": "completed" }, { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json.summary) }}" }] }, "options": {} },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "channel": "#wellness-alerts",
+        "text": "=:warning: *Detection Churn Quotidienne*\n\n*Total membres:* {{ $json.summary.total }}\n*Sains:* {{ $json.summary.healthy }} | *A risque:* {{ $json.summary.at_risk }}\n\n{{ $json.summary.critical > 0 ? ':rotating_light: ' + $json.summary.critical + ' CRITIQUES (30+ jours inactifs)' : '' }}\n{{ $json.summary.high > 0 ? ':orange_circle: ' + $json.summary.high + ' risque eleve (21+ jours)' : '' }}\n{{ $json.summary.medium > 0 ? ':yellow_circle: ' + $json.summary.medium + ' risque moyen (14+ jours)' : '' }}\n\n*{{ $json.actions?.length || 0 }} actions de retention generees*\n\n_Genere par AI Retention Specialist_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1780, 300],
+      "credentials": { "slackApi": { "id": "slack-credentials", "name": "Slack" } }
+    }
+  ],
+  "connections": {
+    "Daily 7AM": { "main": [[{ "node": "Fetch All Members", "type": "main", "index": 0 }]] },
+    "Fetch All Members": { "main": [[{ "node": "Detect Churn Risk", "type": "main", "index": 0 }]] },
+    "Detect Churn Risk": { "main": [[{ "node": "Has At-Risk Members?", "type": "main", "index": 0 }]] },
+    "Has At-Risk Members?": { "main": [[{ "node": "AI Retention Strategy", "type": "main", "index": 0 }]] },
+    "AI Retention Strategy": { "main": [[{ "node": "Format Output", "type": "main", "index": 0 }]] },
+    "Format Output": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] },
+    "Log Action": { "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "retention" }, { "name": "churn" }, { "name": "agent-12" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

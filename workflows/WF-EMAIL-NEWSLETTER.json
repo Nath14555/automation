@@ -1,0 +1,153 @@
+{
+  "name": "WF-EMAIL-NEWSLETTER",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "triggerAtHour": 8, "triggerAtDay": 4 }] }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Thursday 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "content_calendar",
+        "filterType": "string",
+        "filterString": "status=eq.published&published_at=gte.{{ new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() }}&order=published_at.desc&limit=5",
+        "options": {}
+      },
+      "id": "fetch-week-content",
+      "name": "Fetch This Week Content",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "content_calendar",
+        "filterType": "string",
+        "filterString": "content_type=in.(post,reel)&platform=in.(meta,tiktok)&scheduled_at=gte.{{ new Date().toISOString() }}&scheduled_at=lte.{{ new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() }}&limit=3",
+        "options": {}
+      },
+      "id": "fetch-upcoming",
+      "name": "Fetch Upcoming Events",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 400],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es l'email marketer d'un club social wellness a Montreal. Tu rediges la newsletter hebdomadaire.\n\nGenere un JSON avec:\n- subject: objet accrocheur (emoji + 50 char max)\n- preview_text: previsualisation (60 char)\n- sections: tableau de sections, chaque section avec:\n  - title: titre de la section\n  - content: contenu HTML\n  - cta: bouton CTA si applicable\n- wellness_tip: conseil wellness de la semaine\n- upcoming_events: evenements a venir\n- member_spotlight: spotlight sur un type de membre (fictif mais realiste)\n- closing: message de fermeture motivant\n\nStyle:\n- Tutoiement, ton chaleureux\n- 3-4 sections max\n- Chaque section: 50-100 mots\n- Design: clean, minimaliste\n- Un tip wellness actionnable\n- Toujours mentionner le prochain evenement"
+            },
+            {
+              "role": "user",
+              "content": "=Contenu publie cette semaine:\n{{ JSON.stringify($('Fetch This Week Content').all().map(c => c.json.title)) }}\n\nEvenements a venir:\n{{ JSON.stringify($('Fetch Upcoming Events').all().map(c => ({ title: c.json.title, date: c.json.scheduled_at }))) }}\n\nSemaine du: {{ new Date().toISOString().split('T')[0] }}\n\nGenere la newsletter:"
+            }
+          ]
+        },
+        "options": { "temperature": 0.7, "responseFormat": "json_object" }
+      },
+      "id": "generate-newsletter",
+      "name": "AI Generate Newsletter",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": { "openAiApi": { "id": "openai-credentials", "name": "OpenAI" } }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet newsletter;\ntry { newsletter = JSON.parse(aiResponse); } catch (e) { newsletter = { subject: 'Newsletter Wellness', sections: [] }; }\n\n// Build HTML\nlet html = `<div style=\"max-width:600px;margin:0 auto;font-family:'Helvetica Neue',Arial,sans-serif;color:#333;\">`;\nhtml += `<div style=\"background:#f5f0eb;padding:30px;text-align:center;\"><h1 style=\"color:#2d2d2d;font-size:24px;\">${newsletter.subject?.replace(/^[^\\w]+ /, '') || 'Newsletter Wellness'}</h1></div>`;\n\nfor (const section of (newsletter.sections || [])) {\n  html += `<div style=\"padding:20px 30px;\"><h2 style=\"color:#6b5b4e;font-size:18px;\">${section.title}</h2><p style=\"line-height:1.6;\">${section.content}</p>`;\n  if (section.cta) html += `<a href=\"#\" style=\"display:inline-block;background:#6b5b4e;color:white;padding:12px 24px;text-decoration:none;border-radius:25px;margin:10px 0;\">${section.cta}</a>`;\n  html += `</div><hr style=\"border:none;border-top:1px solid #e8e0d8;margin:0 30px;\">`;\n}\n\nif (newsletter.wellness_tip) {\n  html += `<div style=\"padding:20px 30px;background:#f9f6f2;\"><h3 style=\"color:#6b5b4e;\">Tip Wellness de la semaine</h3><p style=\"line-height:1.6;\">${newsletter.wellness_tip}</p></div>`;\n}\n\nhtml += `<div style=\"padding:20px 30px;text-align:center;color:#888;font-size:12px;\"><p>${newsletter.closing || 'A bientot au studio!'}</p></div></div>`;\n\nreturn {\n  json: {\n    subject: newsletter.subject,\n    preview_text: newsletter.preview_text,\n    html_body: html,\n    agent_id: 'email-marketer',\n    workflow_id: 'WF-EMAIL-NEWSLETTER'\n  }\n};"
+      },
+      "id": "build-html",
+      "name": "Build Newsletter HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "email_campaigns",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "name", "fieldValue": "=newsletter_{{ new Date().toISOString().split('T')[0] }}" },
+            { "fieldName": "campaign_type", "fieldValue": "newsletter" },
+            { "fieldName": "subject_line", "fieldValue": "={{ $json.subject }}" },
+            { "fieldName": "segment", "fieldValue": "all_subscribers" },
+            { "fieldName": "status", "fieldValue": "draft" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-newsletter",
+      "name": "Save Newsletter",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "email-marketer" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-EMAIL-NEWSLETTER" },
+            { "fieldName": "action", "fieldValue": "generate_newsletter" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ subject: $json.subject }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": { "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" } }
+    },
+    {
+      "parameters": {
+        "channel": "#wellness-reports",
+        "text": "=:love_letter: *Newsletter generee*\nSujet: {{ $json.subject }}\nStatut: Draft - en attente d'approbation\n\n_Genere par AI Email Marketer_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 300],
+      "credentials": { "slackApi": { "id": "slack-credentials", "name": "Slack" } }
+    }
+  ],
+  "connections": {
+    "Weekly Thursday 8AM": { "main": [[{ "node": "Fetch This Week Content", "type": "main", "index": 0 }, { "node": "Fetch Upcoming Events", "type": "main", "index": 0 }]] },
+    "Fetch This Week Content": { "main": [[{ "node": "AI Generate Newsletter", "type": "main", "index": 0 }]] },
+    "Fetch Upcoming Events": { "main": [[{ "node": "AI Generate Newsletter", "type": "main", "index": 0 }]] },
+    "AI Generate Newsletter": { "main": [[{ "node": "Build Newsletter HTML", "type": "main", "index": 0 }]] },
+    "Build Newsletter HTML": { "main": [[{ "node": "Save Newsletter", "type": "main", "index": 0 }]] },
+    "Save Newsletter": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] },
+    "Log Action": { "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "email" }, { "name": "newsletter" }, { "name": "agent-06" }],
+  "triggerCount": 1,
+  "pinData": {}
+}
