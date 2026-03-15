@@ -1,0 +1,196 @@
+{
+  "name": "WF-WELLNESS-MEMBERSHIP",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "triggerAtHour": 9 }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "leads",
+        "filterType": "string",
+        "filterString": "lifecycle_stage=in.(lead,mql)&created_at=lte.{{ new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() }}",
+        "options": {}
+      },
+      "id": "fetch-unconverted",
+      "name": "Fetch Unconverted Leads",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "leads",
+        "filterType": "string",
+        "filterString": "lifecycle_stage=eq.customer&updated_at=lte.{{ new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString() }}",
+        "options": {}
+      },
+      "id": "fetch-inactive-members",
+      "name": "Fetch Inactive Members",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 400],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "booking_logs",
+        "filterType": "string",
+        "filterString": "booking_status=eq.confirmed&booking_datetime=gte.{{ new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() }}&booking_datetime=lte.{{ new Date().toISOString() }}",
+        "options": {}
+      },
+      "id": "fetch-recent-trials",
+      "name": "Fetch Recent Trial Classes",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 600],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const unconverted = $('Fetch Unconverted Leads').all() || [];\nconst inactive = $('Fetch Inactive Members').all() || [];\nconst recentTrials = $('Fetch Recent Trial Classes').all() || [];\n\n// Categorize actions needed\nconst actions = [];\n\n// 1. Follow up leads who haven't booked a trial\nfor (const lead of unconverted) {\n  const daysSinceCreated = Math.floor((Date.now() - new Date(lead.json.created_at).getTime()) / (24 * 60 * 60 * 1000));\n  if (daysSinceCreated === 2 || daysSinceCreated === 5 || daysSinceCreated === 10) {\n    actions.push({\n      type: 'followup_lead',\n      lead: lead.json,\n      days_since: daysSinceCreated,\n      message_template: daysSinceCreated === 2 ? 'gentle_reminder' : (daysSinceCreated === 5 ? 'social_proof' : 'last_chance')\n    });\n  }\n}\n\n// 2. Post-trial follow up (convert to membership)\nfor (const trial of recentTrials) {\n  const daysSinceTrial = Math.floor((Date.now() - new Date(trial.json.booking_datetime).getTime()) / (24 * 60 * 60 * 1000));\n  if (daysSinceTrial >= 1 && daysSinceTrial <= 3) {\n    actions.push({\n      type: 'post_trial_followup',\n      trial: trial.json,\n      days_since: daysSinceTrial,\n      message_template: daysSinceTrial === 1 ? 'day_after_trial' : 'membership_offer'\n    });\n  }\n}\n\n// 3. Re-engage inactive members\nfor (const member of inactive) {\n  const daysSinceActive = Math.floor((Date.now() - new Date(member.json.updated_at).getTime()) / (24 * 60 * 60 * 1000));\n  if (daysSinceActive >= 14 && daysSinceActive <= 30) {\n    actions.push({\n      type: 'reactivate_member',\n      member: member.json,\n      days_inactive: daysSinceActive,\n      message_template: 'we_miss_you'\n    });\n  }\n}\n\nreturn {\n  json: {\n    date: new Date().toISOString().split('T')[0],\n    total_actions: actions.length,\n    followup_leads: actions.filter(a => a.type === 'followup_lead').length,\n    post_trial: actions.filter(a => a.type === 'post_trial_followup').length,\n    reactivation: actions.filter(a => a.type === 'reactivate_member').length,\n    actions\n  }\n};"
+      },
+      "id": "plan-actions",
+      "name": "Plan Membership Actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es le responsable membership d'un club social wellness a Montreal. Tu generes des messages de suivi personnalises pour convertir les leads en membres.\n\nRetourne un JSON avec un tableau 'messages' contenant pour chaque action:\n- recipient_id: id du destinataire\n- channel: dm|email|sms\n- message: le message personnalise (2-3 phrases max, ton chaleureux, tutoiement)\n- cta: le call to action\n- offer: offre speciale si applicable\n\nTemplates par type:\n- gentle_reminder: rappel doux que le cours decouverte les attend\n- social_proof: temoignage d'un membre + invitation\n- last_chance: offre limitee dans le temps\n- day_after_trial: message post-cours 'comment c'etait?'\n- membership_offer: offre speciale membership avec deadline\n- we_miss_you: message bienveillant de reactivation + event a venir\n\nNe JAMAIS etre agressif ou culpabilisant. Inspirer, pas presser."
+            },
+            {
+              "role": "user",
+              "content": "=Actions du jour:\n{{ JSON.stringify($json.actions.slice(0, 20)) }}\n\nGenere les messages personnalises:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-messages",
+      "name": "AI Generate Follow-up Messages",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [900, 400],
+      "credentials": {
+        "openAiApi": { "id": "openai-credentials", "name": "OpenAI" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet messages;\ntry { messages = JSON.parse(aiResponse); } catch (e) { messages = { messages: [] }; }\n\nconst planData = $('Plan Membership Actions').item.json;\n\nreturn {\n  json: {\n    report_type: 'membership_followup',\n    date: planData.date,\n    agent_id: 'sales-closer',\n    workflow_id: 'WF-WELLNESS-MEMBERSHIP',\n    summary: {\n      total_actions: planData.total_actions,\n      followup_leads: planData.followup_leads,\n      post_trial: planData.post_trial,\n      reactivation: planData.reactivation\n    },\n    messages: messages.messages || []\n  }\n};"
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "sales-closer" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-WELLNESS-MEMBERSHIP" },
+            { "fieldName": "action", "fieldValue": "membership_followup" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify($json.summary) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 400],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#wellness-sales",
+        "text": "=:sparkles: *Suivi Membership - {{ $json.date }}*\n\n*Actions du jour:*\n- Relance leads: {{ $json.summary.followup_leads }}\n- Post-cours decouverte: {{ $json.summary.post_trial }}\n- Reactivation membres: {{ $json.summary.reactivation }}\n\n*Total: {{ $json.summary.total_actions }} messages a envoyer*\n\n_Genere par AI Sales Closer_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 400],
+      "credentials": {
+        "slackApi": { "id": "slack-credentials", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 9AM": {
+      "main": [
+        [
+          { "node": "Fetch Unconverted Leads", "type": "main", "index": 0 },
+          { "node": "Fetch Inactive Members", "type": "main", "index": 0 },
+          { "node": "Fetch Recent Trial Classes", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Unconverted Leads": {
+      "main": [[{ "node": "Plan Membership Actions", "type": "main", "index": 0 }]]
+    },
+    "Fetch Inactive Members": {
+      "main": [[{ "node": "Plan Membership Actions", "type": "main", "index": 0 }]]
+    },
+    "Fetch Recent Trial Classes": {
+      "main": [[{ "node": "Plan Membership Actions", "type": "main", "index": 0 }]]
+    },
+    "Plan Membership Actions": {
+      "main": [[{ "node": "AI Generate Follow-up Messages", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Follow-up Messages": {
+      "main": [[{ "node": "Format Output", "type": "main", "index": 0 }]]
+    },
+    "Format Output": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "wellness" }, { "name": "membership" }, { "name": "sales" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

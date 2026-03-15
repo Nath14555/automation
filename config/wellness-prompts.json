@@ -1,0 +1,133 @@
+{
+  "brand": {
+    "name": "Club Social Wellness",
+    "tagline": "Bouge. Connecte. Rayonne.",
+    "mission": "Creer la plus grande communaute wellness a Montreal en combinant pilates, evenements sociaux et bien-etre holistique.",
+    "values": ["communaute", "bien-etre", "inclusivite", "authenticite", "energie positive"],
+    "tone_keywords": ["chaleureux", "motivant", "inclusif", "zen", "energique", "authentique"],
+    "forbidden_words": ["regime", "maigrir", "perte de poids", "anti-age", "defaut", "probleme corporel"],
+    "emoji_style": "modere - utiliser des emojis positifs et wellness: 🧘‍♀️ ✨ 💫 🌿 🤍 🫶 💪 🌅"
+  },
+
+  "system_prompts": {
+    "marketing_strategist": "Tu es le stratege marketing d'un club social wellness premium a Montreal. Tu comprends le marche du bien-etre au Quebec, les tendances pilates/yoga/wellness, et tu sais comment construire une communaute engagee. Tu penses en termes d'empire: comment scaler de 1 studio a une marque lifestyle nationale. Tu analyses le marche wellness montrealais et identifies les opportunites de croissance. Tes recommandations sont toujours alignees avec les valeurs: communaute, bien-etre, inclusivite, authenticite.",
+
+    "content_creator": "Tu es le content creator d'un club social wellness a Montreal. Tu crees du contenu aspirationnel mais authentique qui donne envie de rejoindre la communaute. Tu connais les codes visuels du wellness (tons neutres, lumiere naturelle, mouvement, connexion). Tu alternes entre: contenu educatif (bienfaits du pilates, tips wellness), contenu communautaire (temoignages, behind the scenes, recap evenements), contenu aspirationnel (lifestyle, motivation, self-care). Tu ne fais JAMAIS de body-shaming. Tu inspires sans culpabiliser. Tu utilises le tutoiement. Hashtags locaux Montreal + wellness.",
+
+    "community_manager": "Tu es le community manager d'un club social wellness a Montreal. Tu geres une communaute bienveillante et inclusive. Tu reponds avec chaleur, tu connais les prenoms des membres reguliers. Tu encourages les gens sans etre condescendant. Tu utilises le tutoiement et un ton amical. Pour les questions sur les cours: oriente vers le booking. Pour les plaintes: empathie d'abord, solution ensuite. Pour les nouveaux: accueil chaleureux et invitation a un cours decouverte. Tu ne donnes JAMAIS de conseils medicaux.",
+
+    "seo_specialist": "Tu es le specialiste SEO d'un club social wellness a Montreal. Tu optimises pour le marche local montrealais (SEO local). Tu connais les requetes typiques: 'pilates montreal', 'cours reformer proche de moi', 'evenements bien-etre montreal', 'club social montreal'. Tu optimises aussi pour les requetes informationnelles wellness pour attirer du trafic organique. Tu penses Google My Business, avis Google, citations locales.",
+
+    "media_buyer": "Tu es le media buyer d'un club social wellness a Montreal. Tu geres des campagnes sur Meta (Instagram surtout - c'est le canal #1 pour le wellness) et TikTok. Tu cibles la region de Montreal. Tu connais les audiences wellness: yoga lovers, fitness enthusiasts, self-care, lifestyle. Tu optimises pour des objectifs: cours decouverte (conversion), membership (lead gen), evenements (engagement). Tu sais que le visuel est ROI dans le wellness - les creatives avec des vrais membres performent mieux que le stock."
+  },
+
+  "content_pillars": [
+    {
+      "pillar": "Pilates & Mouvement",
+      "percentage": 30,
+      "types": ["tips technique", "demo exercice", "bienfaits", "avant/apres progression", "reformer spotlight"],
+      "hashtags": ["#PilatesMontreal", "#ReformerPilates", "#PilatesLovers", "#BougeTonCorps", "#Mouvement"]
+    },
+    {
+      "pillar": "Communaute & Social",
+      "percentage": 30,
+      "types": ["recap evenements", "temoignages membres", "behind the scenes", "team spotlight", "celebrations"],
+      "hashtags": ["#ClubSocial", "#CommunauteWellness", "#MontrealLife", "#SquadGoals", "#Ensemble"]
+    },
+    {
+      "pillar": "Wellness & Self-Care",
+      "percentage": 25,
+      "types": ["tips bien-etre", "nutrition intuitive", "sante mentale", "routine morning", "meditation"],
+      "hashtags": ["#Wellness", "#BienEtre", "#SelfCare", "#SanteMentale", "#VieSaine"]
+    },
+    {
+      "pillar": "Evenements & Lifestyle",
+      "percentage": 15,
+      "types": ["annonce evenement", "teaser", "recap", "promo early bird", "lifestyle montreal"],
+      "hashtags": ["#EvenementMontreal", "#WellnessEvent", "#BrunchMontreal", "#RetreatQuebec", "#LifestyleMTL"]
+    }
+  ],
+
+  "sales_funnel": {
+    "stages": {
+      "awareness": {
+        "goal": "Faire connaitre le club",
+        "channels": ["instagram_reels", "tiktok", "blog_seo", "meta_ads"],
+        "content": "Contenu aspirationnel, tips wellness, vibes communautaires",
+        "cta": "Decouvre notre communaute"
+      },
+      "interest": {
+        "goal": "Engager et eduquer",
+        "channels": ["instagram_stories", "email_sequence", "dm_automation"],
+        "content": "Temoignages, behind the scenes, FAQ, bienfaits du pilates",
+        "cta": "Essaie un cours gratuit"
+      },
+      "trial": {
+        "goal": "Convertir en cours decouverte",
+        "channels": ["booking_automation", "dm_followup", "sms"],
+        "content": "Offre cours decouverte, experience personnalisee",
+        "cta": "Reserve ton cours decouverte"
+      },
+      "conversion": {
+        "goal": "Convertir en membre",
+        "channels": ["email_sequence", "in_person", "followup_automation"],
+        "content": "Offre membership, avantages exclusifs, temoignages membres",
+        "cta": "Rejoins le club"
+      },
+      "retention": {
+        "goal": "Fideliser et upsell",
+        "channels": ["email", "app", "events", "community"],
+        "content": "Evenements exclusifs, challenges, programme fidelite, retreats",
+        "cta": "Upgrade ton experience"
+      },
+      "advocacy": {
+        "goal": "Transformer en ambassadeur",
+        "channels": ["referral_program", "ugc", "reviews"],
+        "content": "Programme parrainage, partage ton experience, avis Google",
+        "cta": "Invite un ami"
+      }
+    }
+  },
+
+  "event_types": [
+    { "type": "Brunch Wellness", "frequency": "mensuel", "audience": "membres + invites" },
+    { "type": "Soiree Pilates & Cocktails", "frequency": "mensuel", "audience": "tous" },
+    { "type": "Retreat Wellness", "frequency": "trimestriel", "audience": "membres premium" },
+    { "type": "Atelier Self-Care", "frequency": "bimensuel", "audience": "membres" },
+    { "type": "Cours en plein air", "frequency": "ete hebdomadaire", "audience": "tous" },
+    { "type": "Challenge 30 jours", "frequency": "trimestriel", "audience": "tous" }
+  ],
+
+  "email_sequences": {
+    "new_lead": {
+      "name": "Bienvenue - Cours Decouverte",
+      "emails": 5,
+      "days": [0, 1, 3, 5, 7],
+      "goal": "Convertir en cours decouverte"
+    },
+    "post_trial": {
+      "name": "Post Cours Decouverte",
+      "emails": 4,
+      "days": [0, 2, 5, 10],
+      "goal": "Convertir en membership"
+    },
+    "new_member": {
+      "name": "Onboarding Nouveau Membre",
+      "emails": 6,
+      "days": [0, 1, 3, 7, 14, 30],
+      "goal": "Integrer et engager"
+    },
+    "inactive_member": {
+      "name": "Reengagement",
+      "emails": 3,
+      "days": [0, 3, 7],
+      "goal": "Reactiver les membres inactifs"
+    },
+    "event_promo": {
+      "name": "Promotion Evenement",
+      "emails": 3,
+      "days": [-14, -7, -1],
+      "goal": "Remplir un evenement"
+    }
+  }
+}

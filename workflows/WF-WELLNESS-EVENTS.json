@@ -1,0 +1,178 @@
+{
+  "name": "WF-WELLNESS-EVENTS",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/wellness-event",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook New Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "wellness-event"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse event details from webhook\nconst body = $input.item.json.body || $input.item.json;\n\nconst event = {\n  name: body.event_name || 'Evenement Wellness',\n  type: body.event_type || 'soiree', // brunch|soiree|retreat|atelier|plein_air|challenge\n  date: body.date || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],\n  time: body.time || '18:00',\n  location: body.location || 'Studio Montreal',\n  capacity: body.capacity || 30,\n  price: body.price || 0, // 0 = inclus dans membership\n  description: body.description || '',\n  audience: body.audience || 'tous', // membres|tous|premium\n  early_bird_deadline: body.early_bird_deadline || null,\n  early_bird_price: body.early_bird_price || null\n};\n\nreturn { json: event };"
+      },
+      "id": "parse-event",
+      "name": "Parse Event Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es le content creator d'un club social wellness a Montreal. Tu crees TOUT le materiel promotionnel pour un evenement.\n\nGenere un JSON avec:\n- instagram_post: caption pour Instagram (hook accrocheur, details, CTA, emojis wellness)\n- instagram_story_sequence: 3-4 stories avec texte par story\n- facebook_post: version Facebook (plus detaillee)\n- tiktok_script: script pour video teaser TikTok (15-30 sec)\n- email_subject: objet de l'email\n- email_body: corps de l'email HTML simple\n- sms_text: message SMS court (160 char max)\n- visual_prompt: prompt DALL-E pour le visuel de l'evenement\n- hashtags: 10 hashtags pertinents\n- countdown_posts: 3 posts de compte a rebours (J-7, J-3, J-1)\n\nTon: excitant mais zen, inclusif, communautaire. Tutoiement."
+            },
+            {
+              "role": "user",
+              "content": "=Evenement a promouvoir:\n{{ JSON.stringify($json) }}\n\nCree tout le materiel promotionnel:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-promo",
+      "name": "AI Generate Event Promo",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": { "id": "openai-credentials", "name": "OpenAI" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const event = $('Parse Event Details').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet promo;\ntry { promo = JSON.parse(aiResponse); } catch (e) { promo = { error: 'Parse failed' }; }\n\n// Schedule content in calendar\nconst eventDate = new Date(event.date);\nconst posts = [];\n\n// Announcement post (now)\nposts.push({\n  title: `Annonce: ${event.name}`,\n  content_type: 'post',\n  platform: 'meta',\n  content: promo.instagram_post,\n  scheduled_at: new Date().toISOString(),\n  status: 'approved'\n});\n\n// Countdown J-7\nif (promo.countdown_posts?.[0]) {\n  const j7 = new Date(eventDate.getTime() - 7 * 24 * 60 * 60 * 1000);\n  posts.push({\n    title: `${event.name} - J-7`,\n    content_type: 'post',\n    platform: 'meta',\n    content: promo.countdown_posts[0],\n    scheduled_at: j7.toISOString(),\n    status: 'approved'\n  });\n}\n\n// Countdown J-3\nif (promo.countdown_posts?.[1]) {\n  const j3 = new Date(eventDate.getTime() - 3 * 24 * 60 * 60 * 1000);\n  posts.push({\n    title: `${event.name} - J-3`,\n    content_type: 'post',\n    platform: 'meta',\n    content: promo.countdown_posts[1],\n    scheduled_at: j3.toISOString(),\n    status: 'approved'\n  });\n}\n\n// Countdown J-1\nif (promo.countdown_posts?.[2]) {\n  const j1 = new Date(eventDate.getTime() - 1 * 24 * 60 * 60 * 1000);\n  posts.push({\n    title: `${event.name} - Demain!`,\n    content_type: 'post',\n    platform: 'meta',\n    content: promo.countdown_posts[2],\n    scheduled_at: j1.toISOString(),\n    status: 'approved'\n  });\n}\n\n// TikTok teaser\nposts.push({\n  title: `TikTok: ${event.name}`,\n  content_type: 'reel',\n  platform: 'tiktok',\n  content: promo.tiktok_script,\n  scheduled_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),\n  status: 'draft'\n});\n\nreturn {\n  json: {\n    event,\n    promo,\n    scheduled_posts: posts,\n    posts_count: posts.length\n  }\n};"
+      },
+      "id": "schedule-content",
+      "name": "Schedule Promo Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "content_calendar",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "title", "fieldValue": "={{ $json.scheduled_posts[0]?.title || $json.event.name }}" },
+            { "fieldName": "content_type", "fieldValue": "post" },
+            { "fieldName": "platform", "fieldValue": "meta" },
+            { "fieldName": "status", "fieldValue": "approved" },
+            { "fieldName": "content", "fieldValue": "={{ $json.promo.instagram_post }}" },
+            { "fieldName": "hashtags", "fieldValue": "={{ JSON.stringify($json.promo.hashtags || []) }}" },
+            { "fieldName": "created_by", "fieldValue": "content-creator" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-content",
+      "name": "Save to Calendar",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "content-creator" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-WELLNESS-EVENTS" },
+            { "fieldName": "action", "fieldValue": "event_promo_generation" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ event: $json.event.name, posts: $json.posts_count }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#wellness-reports",
+        "text": "=:tada: *Nouvel Evenement Programme*\n\n*{{ $json.event.name }}*\nDate: {{ $json.event.date }} a {{ $json.event.time }}\nLieu: {{ $json.event.location }}\nCapacite: {{ $json.event.capacity }} places\nPrix: {{ $json.event.price === 0 ? 'Inclus membership' : $json.event.price + '$' }}\n\n*Contenu promotionnel genere:*\n- {{ $json.posts_count }} posts programmes (Instagram + TikTok)\n- Email promo pret\n- SMS pret\n- Sequence de countdown J-7, J-3, J-1\n\n_Genere par AI Content Creator_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1560, 300],
+      "credentials": {
+        "slackApi": { "id": "slack-credentials", "name": "Slack" }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, event: $json.event.name, posts_scheduled: $json.posts_count, promo_ready: true }) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook New Event": {
+      "main": [[{ "node": "Parse Event Details", "type": "main", "index": 0 }]]
+    },
+    "Parse Event Details": {
+      "main": [[{ "node": "AI Generate Event Promo", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Event Promo": {
+      "main": [[{ "node": "Schedule Promo Content", "type": "main", "index": 0 }]]
+    },
+    "Schedule Promo Content": {
+      "main": [[{ "node": "Save to Calendar", "type": "main", "index": 0 }]]
+    },
+    "Save to Calendar": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [
+        [
+          { "node": "Notify Slack", "type": "main", "index": 0 },
+          { "node": "Respond", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "wellness" }, { "name": "events" }, { "name": "content" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

@@ -1,0 +1,134 @@
+{
+  "name": "WF-WELLNESS-FUNNEL",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Determine funnel stage and next action for wellness lead\nconst lead = $input.item.json;\nconst source = lead.source || 'unknown';\nconst intent = lead.intent || 'other';\nconst stage = lead.current_stage || 'new';\nconst message = (lead.message || '').toLowerCase();\n\n// Wellness-specific intent detection keywords\nconst bookingKeywords = ['reserver', 'booking', 'cours', 'essayer', 'decouverte', 'horaire', 'schedule', 'dispo', 'place', 'inscription'];\nconst membershipKeywords = ['abonnement', 'membership', 'membre', 'forfait', 'prix', 'tarif', 'combien', 'mensuel', 'illimite'];\nconst eventKeywords = ['evenement', 'event', 'brunch', 'soiree', 'retreat', 'atelier', 'workshop'];\nconst pilatesKeywords = ['pilates', 'reformer', 'mat', 'barre', 'cours', 'debutant', 'avance', 'niveau'];\n\nlet detectedIntent = intent;\nlet funnelStage = stage;\nlet nextAction = 'nurture';\nlet offerType = null;\n\n// Detect wellness-specific intents\nif (bookingKeywords.some(kw => message.includes(kw))) {\n  detectedIntent = 'booking_trial';\n  funnelStage = 'trial';\n  nextAction = 'offer_trial_class';\n  offerType = 'cours_decouverte';\n} else if (membershipKeywords.some(kw => message.includes(kw))) {\n  detectedIntent = 'membership_inquiry';\n  funnelStage = 'conversion';\n  nextAction = 'present_membership';\n  offerType = 'membership';\n} else if (eventKeywords.some(kw => message.includes(kw))) {\n  detectedIntent = 'event_interest';\n  funnelStage = 'interest';\n  nextAction = 'present_events';\n  offerType = 'evenement';\n} else if (pilatesKeywords.some(kw => message.includes(kw))) {\n  detectedIntent = 'pilates_interest';\n  funnelStage = 'interest';\n  nextAction = 'educate_pilates';\n  offerType = 'cours_decouverte';\n}\n\n// Stage progression logic\nconst stageProgression = {\n  'new': { next: 'interest', action: 'welcome_and_educate' },\n  'interest': { next: 'trial', action: 'offer_trial_class' },\n  'trial': { next: 'conversion', action: 'post_trial_followup' },\n  'conversion': { next: 'member', action: 'present_membership' },\n  'member': { next: 'retention', action: 'engage_and_upsell' },\n  'retention': { next: 'advocacy', action: 'referral_program' }\n};\n\nreturn {\n  json: {\n    ...lead,\n    detected_intent: detectedIntent,\n    funnel_stage: funnelStage,\n    next_action: nextAction,\n    offer_type: offerType,\n    stage_progression: stageProgression[funnelStage] || stageProgression['new']\n  }\n};"
+      },
+      "id": "detect-funnel-stage",
+      "name": "Detect Funnel Stage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es l'assistant conversationnel d'un club social wellness a Montreal specialise en pilates et evenements sociaux.\n\nTa personnalite:\n- Chaleureux, inclusif, energique mais zen\n- Tu tutoies toujours\n- Tu inspires sans culpabiliser\n- Tu ne fais JAMAIS de body-shaming\n- Tu ne donnes JAMAIS de conseils medicaux\n- Tu connais les bienfaits du pilates: posture, force, flexibilite, sante mentale\n\nSelon le funnel_stage, adapte ta reponse:\n\n- awareness/new: Accueil chaleureux, presente le club comme une communaute (pas juste un gym)\n- interest: Educatif, partage les bienfaits, temoignages, invite a decouvrir\n- trial: Offre un cours decouverte, facilite le booking, rassure les debutants\n- conversion: Presente les avantages du membership, offre speciale, urgence douce\n- member: Engage, informe des prochains events, encourage la progression\n- retention: Programme de parrainage, events exclusifs, reconnaissance\n\nRegles:\n- Reponse courte et naturelle (2-4 phrases max pour DM, plus pour email)\n- Toujours inclure un CTA doux\n- Si question sur les prix: donner une fourchette et inviter a essayer d'abord\n- Si debutant inquiet: rassurer que tous les niveaux sont bienvenus\n\nRetourne un JSON avec: reply_text, cta, offer_type (null si aucune), should_book (true/false), email_sequence_trigger (null ou nom de sequence)"
+            },
+            {
+              "role": "user",
+              "content": "=Canal: {{ $json.source }} ({{ $json.platform || $json.source }})\nMessage: {{ $json.message }}\nFunnel stage: {{ $json.funnel_stage }}\nIntent detecte: {{ $json.detected_intent }}\nHistorique: {{ JSON.stringify(($json.conversation_history || []).slice(-3)) }}\n\nGenere la reponse appropriee:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "generate-response",
+      "name": "AI Wellness Response",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const lead = $('Detect Funnel Stage').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet response;\ntry { response = JSON.parse(aiResponse); } catch (e) { response = { reply_text: aiResponse, cta: null }; }\n\nreturn {\n  json: {\n    reply_text: response.reply_text,\n    action: response.should_book ? 'book' : 'send',\n    handoff: false,\n    stage: lead.funnel_stage,\n    intent: lead.detected_intent,\n    source: lead.source,\n    conversation_id: lead.conversation_id,\n    sender_id: lead.sender_id,\n    message_id: lead.message_id,\n    offer_type: response.offer_type,\n    email_sequence_trigger: response.email_sequence_trigger,\n    cta: response.cta\n  }\n};"
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "tableId": "leads",
+        "filterType": "string",
+        "filterString": "email=eq.{{ $json.sender_id }}",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "source", "fieldValue": "={{ $json.source }}" },
+            { "fieldName": "lifecycle_stage", "fieldValue": "={{ $json.stage === 'trial' ? 'mql' : ($json.stage === 'conversion' ? 'sql' : 'lead') }}" },
+            { "fieldName": "tags", "fieldValue": "={{ JSON.stringify([$json.detected_intent, $json.offer_type].filter(Boolean)) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-lead",
+      "name": "Update Lead Stage",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "output",
+              "name": "output",
+              "value": "={{ $('Format Output').item.json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "return-output",
+      "name": "Return Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [[{ "node": "Detect Funnel Stage", "type": "main", "index": 0 }]]
+    },
+    "Detect Funnel Stage": {
+      "main": [[{ "node": "AI Wellness Response", "type": "main", "index": 0 }]]
+    },
+    "AI Wellness Response": {
+      "main": [[{ "node": "Format Output", "type": "main", "index": 0 }]]
+    },
+    "Format Output": {
+      "main": [[{ "node": "Update Lead Stage", "type": "main", "index": 0 }]]
+    },
+    "Update Lead Stage": {
+      "main": [[{ "node": "Return Output", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "wellness" }, { "name": "funnel" }, { "name": "core" }],
+  "triggerCount": 0,
+  "pinData": {}
+}
