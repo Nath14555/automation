@@ -12,6 +12,9 @@
     "video_scripts",
     "captions",
     "visual_generation",
+    "canva_auto_design",
+    "pinterest_inspiration",
+    "pinterest_publishing",
     "multi_platform_adaptation",
     "editorial_calendar",
     "ab_copy_variants"
@@ -23,6 +26,7 @@
     "claude_api",
     "dalle_api",
     "canva_api",
+    "pinterest_api",
     "buffer_api",
     "wordpress_api",
     "google_sheets",
@@ -57,6 +61,18 @@
       "description": "Creation de visuels avec IA generative"
     },
     {
+      "id": "WF-CONTENT-CANVA",
+      "name": "Generation visuels Canva",
+      "trigger": "workflow_call",
+      "description": "Auto-generation de visuels avec Canva API (templates par plateforme)"
+    },
+    {
+      "id": "WF-PINTEREST-INSPIRE",
+      "name": "Pinterest inspiration & publishing",
+      "trigger": "workflow_call",
+      "description": "Recherche d'inspiration Pinterest, analyse de tendances, et publication de pins"
+    },
+    {
       "id": "WF-CONTENT-CALENDAR",
       "name": "Calendrier editorial",
       "trigger": "cron",
@@ -70,7 +86,7 @@
     "properties": {
       "brief": { "type": "string", "description": "Brief creatif du stratege" },
       "brand_voice": { "type": "string", "description": "Ton et style de la marque" },
-      "platform": { "type": "string", "enum": ["meta", "tiktok", "linkedin", "blog", "youtube"] },
+      "platform": { "type": "string", "enum": ["meta", "tiktok", "linkedin", "pinterest", "blog", "youtube"] },
       "content_type": { "type": "string", "enum": ["post", "article", "script", "caption", "visual"] },
       "keywords": { "type": "array", "items": { "type": "string" } },
       "visual_style": { "type": "string" }

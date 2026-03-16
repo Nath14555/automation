@@ -1,0 +1,204 @@
+{
+  "ai_model_strategy": {
+    "version": "1.0.0",
+    "description": "Optimisation du choix de modèle AI par agent et par tâche. Objectif: meilleur résultat au meilleur coût.",
+    "last_updated": "2026-03-16",
+
+    "available_models": {
+      "gpt-4o": {
+        "provider": "openai",
+        "cost_per_1k_input": 0.0025,
+        "cost_per_1k_output": 0.01,
+        "strengths": ["raisonnement complexe", "analyse stratégique", "copywriting premium", "analyse de données"],
+        "best_for": "Tâches qui demandent de la réflexion, de la stratégie ou de la créativité haut de gamme"
+      },
+      "gpt-4o-mini": {
+        "provider": "openai",
+        "cost_per_1k_input": 0.00015,
+        "cost_per_1k_output": 0.0006,
+        "strengths": ["classification", "extraction", "formatage JSON", "tâches simples rapides"],
+        "best_for": "Tâches répétitives, classification, reformatage, réponses courtes"
+      },
+      "claude-sonnet-4-6": {
+        "provider": "anthropic",
+        "cost_per_1k_input": 0.003,
+        "cost_per_1k_output": 0.015,
+        "strengths": ["rédaction longue", "analyse nuancée", "ton de marque", "blog SEO", "empathie"],
+        "best_for": "Contenus longs (blog, email sequences), analyse de sentiment, rédaction empathique"
+      },
+      "claude-haiku-4-5": {
+        "provider": "anthropic",
+        "cost_per_1k_input": 0.0008,
+        "cost_per_1k_output": 0.004,
+        "strengths": ["réponses rapides", "classification", "modération", "résumé"],
+        "best_for": "Réponses communautaires, modération, classification rapide"
+      },
+      "gemini-2.0-flash": {
+        "provider": "google",
+        "cost_per_1k_input": 0.0001,
+        "cost_per_1k_output": 0.0004,
+        "strengths": ["ultra rapide", "très bon marché", "multimodal", "extraction basique"],
+        "best_for": "Tâches à haut volume avec budget serré, pré-traitement de données"
+      }
+    },
+
+    "agent_model_assignments": {
+      "01-marketing-strategist": {
+        "primary_model": "gpt-4o",
+        "reason": "Stratégie = raisonnement complexe. Besoin d'analyser tendances, concurrents, et planifier.",
+        "tasks": {
+          "strategy_brief": { "model": "gpt-4o", "temperature": 0.7 },
+          "competitor_analysis": { "model": "gpt-4o", "temperature": 0.3 },
+          "trends_analysis": { "model": "gpt-4o", "temperature": 0.5 },
+          "campaign_planning": { "model": "gpt-4o", "temperature": 0.6 }
+        }
+      },
+
+      "02-content-creator": {
+        "primary_model": "claude-sonnet-4-6",
+        "reason": "Claude excelle en rédaction créative, ton de marque, et contenu long. Meilleur copywriting francophone.",
+        "tasks": {
+          "social_media_posts": { "model": "claude-sonnet-4-6", "temperature": 0.8, "note": "Claude est meilleur pour le ton chaleureux et authentique" },
+          "blog_articles": { "model": "claude-sonnet-4-6", "temperature": 0.7, "note": "Rédaction SEO longue = force de Claude" },
+          "video_scripts": { "model": "gpt-4o", "temperature": 0.7, "note": "GPT-4o pour la structure narrative vidéo" },
+          "visual_brief_canva": { "model": "gpt-4o-mini", "temperature": 0.7, "note": "Brief visuel = tâche structurée, mini suffit" },
+          "pinterest_seo": { "model": "gpt-4o-mini", "temperature": 0.5, "note": "Optimisation mots-clés = tâche simple" },
+          "ab_variants": { "model": "claude-sonnet-4-6", "temperature": 0.9, "note": "Variantes créatives = haute température" },
+          "editorial_calendar": { "model": "gpt-4o-mini", "temperature": 0.4, "note": "Planification = structuré, mini suffit" }
+        }
+      },
+
+      "03-community-manager": {
+        "primary_model": "claude-haiku-4-5",
+        "reason": "Volume élevé (3x/jour). Haiku est rapide, empathique et abordable pour les réponses communautaires.",
+        "tasks": {
+          "comment_replies": { "model": "claude-haiku-4-5", "temperature": 0.7, "note": "Rapide + empathique, parfait pour les commentaires" },
+          "dm_responses": { "model": "claude-haiku-4-5", "temperature": 0.6, "note": "Réponses DM courtes et chaleureuses" },
+          "engagement_captions": { "model": "claude-sonnet-4-6", "temperature": 0.8, "note": "Monter en gamme pour les captions d'engagement" },
+          "crisis_response": { "model": "gpt-4o", "temperature": 0.3, "note": "Crise = besoin de précision et nuance maximale" }
+        }
+      },
+
+      "04-seo-specialist": {
+        "primary_model": "gpt-4o",
+        "reason": "SEO technique demande du raisonnement analytique. GPT-4o excelle en analyse de données structurées.",
+        "tasks": {
+          "technical_audit": { "model": "gpt-4o", "temperature": 0.2, "note": "Analyse technique = basse température" },
+          "keyword_research": { "model": "gpt-4o", "temperature": 0.4 },
+          "content_optimization": { "model": "claude-sonnet-4-6", "temperature": 0.5, "note": "Claude pour réécrire le contenu SEO naturellement" },
+          "meta_descriptions": { "model": "gpt-4o-mini", "temperature": 0.5, "note": "Court et structuré = mini suffit" }
+        }
+      },
+
+      "05-media-buyer": {
+        "primary_model": "gpt-4o",
+        "reason": "Analyse de données publicitaires complexe. GPT-4o est le meilleur pour l'analyse chiffrée.",
+        "tasks": {
+          "budget_optimization": { "model": "gpt-4o", "temperature": 0.2, "note": "Décisions budgétaires = précision maximale" },
+          "ad_copy": { "model": "claude-sonnet-4-6", "temperature": 0.8, "note": "Claude pour le copywriting pub" },
+          "audience_analysis": { "model": "gpt-4o", "temperature": 0.3 },
+          "performance_report": { "model": "gpt-4o-mini", "temperature": 0.2, "note": "Rapport structuré = mini suffit" }
+        }
+      },
+
+      "06-email-marketer": {
+        "primary_model": "claude-sonnet-4-6",
+        "reason": "Email = rédaction persuasive et empathique. Claude excelle pour les séquences email conversionnelles.",
+        "tasks": {
+          "newsletter": { "model": "claude-sonnet-4-6", "temperature": 0.7 },
+          "email_sequences": { "model": "claude-sonnet-4-6", "temperature": 0.7, "note": "Séquences nurturing = force de Claude" },
+          "subject_lines": { "model": "gpt-4o", "temperature": 0.9, "note": "Sujets accrocheurs = GPT-4o créatif" },
+          "segmentation": { "model": "gpt-4o-mini", "temperature": 0.2, "note": "Classification = mini suffit" }
+        }
+      },
+
+      "07-sales-closer": {
+        "primary_model": "gpt-4o",
+        "reason": "Qualification de leads et scoring = analyse complexe multi-critères.",
+        "tasks": {
+          "lead_scoring": { "model": "gpt-4o", "temperature": 0.2, "note": "Scoring = précision critique" },
+          "follow_up_messages": { "model": "claude-sonnet-4-6", "temperature": 0.6, "note": "Messages personnalisés = Claude" },
+          "objection_handling": { "model": "gpt-4o", "temperature": 0.4, "note": "Raisonnement stratégique" },
+          "qualification": { "model": "gpt-4o-mini", "temperature": 0.2, "note": "Pré-qualification = mini suffit" }
+        }
+      },
+
+      "08-analytics-analyst": {
+        "primary_model": "gpt-4o",
+        "reason": "Analyse de données, patterns, corrélations = force de GPT-4o.",
+        "tasks": {
+          "weekly_report": { "model": "gpt-4o", "temperature": 0.3 },
+          "trend_detection": { "model": "gpt-4o", "temperature": 0.4 },
+          "anomaly_detection": { "model": "gpt-4o-mini", "temperature": 0.1, "note": "Détection simple = mini" },
+          "data_summary": { "model": "gpt-4o-mini", "temperature": 0.2 }
+        }
+      },
+
+      "09-crm-manager": {
+        "primary_model": "gpt-4o-mini",
+        "reason": "Scoring et segmentation = tâches structurées répétitives. Mini est suffisant et économique.",
+        "tasks": {
+          "lead_scoring": { "model": "gpt-4o-mini", "temperature": 0.2 },
+          "segmentation": { "model": "gpt-4o-mini", "temperature": 0.2 },
+          "data_enrichment": { "model": "gpt-4o-mini", "temperature": 0.1 },
+          "churn_prediction": { "model": "gpt-4o", "temperature": 0.3, "note": "Prédiction complexe = GPT-4o" }
+        }
+      },
+
+      "10-reputation-manager": {
+        "primary_model": "claude-haiku-4-5",
+        "reason": "Réponses aux avis = volume moyen, besoin d'empathie. Haiku est parfait.",
+        "tasks": {
+          "review_response": { "model": "claude-haiku-4-5", "temperature": 0.6, "note": "Rapide et empathique" },
+          "sentiment_analysis": { "model": "claude-haiku-4-5", "temperature": 0.2 },
+          "crisis_escalation": { "model": "gpt-4o", "temperature": 0.3, "note": "Crise = modèle premium" }
+        }
+      },
+
+      "11-onboarding-specialist": {
+        "primary_model": "claude-sonnet-4-6",
+        "reason": "Accueil = ton chaleureux et personnalisé. Claude est le meilleur pour ça.",
+        "tasks": {
+          "welcome_message": { "model": "claude-sonnet-4-6", "temperature": 0.7 },
+          "onboarding_sequence": { "model": "claude-sonnet-4-6", "temperature": 0.6 },
+          "checkin_message": { "model": "claude-haiku-4-5", "temperature": 0.6, "note": "Check-in court = Haiku suffit" }
+        }
+      },
+
+      "12-retention-specialist": {
+        "primary_model": "claude-sonnet-4-6",
+        "reason": "Rétention = messages empathiques et persuasifs pour garder les membres.",
+        "tasks": {
+          "churn_detection": { "model": "gpt-4o-mini", "temperature": 0.2, "note": "Détection = classification simple" },
+          "win_back_message": { "model": "claude-sonnet-4-6", "temperature": 0.7, "note": "Message émotionnel = Claude" },
+          "loyalty_rewards": { "model": "gpt-4o-mini", "temperature": 0.3, "note": "Calcul de récompenses = structuré" },
+          "satisfaction_survey": { "model": "claude-haiku-4-5", "temperature": 0.5 }
+        }
+      }
+    },
+
+    "cost_optimization": {
+      "estimated_daily_calls": {
+        "gpt-4o": 15,
+        "gpt-4o-mini": 45,
+        "claude-sonnet-4-6": 25,
+        "claude-haiku-4-5": 35,
+        "gemini-2.0-flash": 0
+      },
+      "estimated_monthly_cost_usd": {
+        "before_optimization": "~$85/mois (tout GPT-4o)",
+        "after_optimization": "~$42/mois (mix optimisé)",
+        "savings": "~50% de réduction"
+      },
+      "rules": [
+        "Utiliser GPT-4o UNIQUEMENT pour: stratégie, analyse complexe, scoring critique",
+        "Utiliser Claude Sonnet pour: rédaction créative, copywriting, emails, contenu long",
+        "Utiliser Claude Haiku pour: réponses communautaires (volume élevé), modération, sentiment",
+        "Utiliser GPT-4o-mini pour: classification, formatage JSON, tâches répétitives structurées",
+        "Réserver Gemini Flash pour: pré-traitement de données à très haut volume si nécessaire"
+      ]
+    },
+
+    "figma_integration_note": "Figma n'offre pas d'API de génération de designs. Utiliser Canva API pour la génération automatique. Figma reste utile manuellement pour: design system, prototypes UI, moodboards collaboratifs. Pas d'automatisation possible via n8n."
+  }
+}

@@ -128,6 +128,7 @@
         { "day": "monday", "time": "08:00", "agent": "analytics-analyst", "workflow": "WF-ANALYTICS-REPORT", "description": "Weekly analytics report" },
         { "day": "monday", "time": "09:00", "agent": "marketing-strategist", "workflow": "WF-STRATEGY-COMPETITOR", "description": "Competitor analysis" },
         { "day": "monday", "time": "08:00", "agent": "content-creator", "workflow": "WF-CONTENT-BLOG", "description": "Weekly SEO blog article" },
+        { "day": "wednesday", "time": "10:00", "agent": "content-creator", "workflow": "WF-PINTEREST-INSPIRE", "description": "Weekly Pinterest inspiration & trend analysis" },
         { "day": "friday", "time": "09:00", "agent": "content-creator", "workflow": "WF-CONTENT-CALENDAR", "description": "Plan next week's editorial calendar" }
       ],
       "realtime": [
@@ -136,7 +137,9 @@
         { "trigger": "workflow_call", "agent": "sales-closer", "workflow": "WF-SALES-QUALIFY", "description": "Score and qualify new leads" },
         { "trigger": "workflow_call", "agent": "onboarding-specialist", "workflow": "WF-ONBOARD-WELCOME", "description": "Onboard new members" },
         { "trigger": "workflow_call", "agent": "email-marketer", "workflow": "WF-EMAIL-SEQUENCE", "description": "Trigger email sequences" },
-        { "trigger": "webhook", "agent": "marketing-strategist", "workflow": "WF-STRATEGY-BRIEF", "description": "Generate campaign briefs on demand" }
+        { "trigger": "webhook", "agent": "marketing-strategist", "workflow": "WF-STRATEGY-BRIEF", "description": "Generate campaign briefs on demand" },
+        { "trigger": "workflow_call", "agent": "content-creator", "workflow": "WF-CONTENT-CANVA", "description": "Auto-generate Canva visuals for posts" },
+        { "trigger": "workflow_call", "agent": "content-creator", "workflow": "WF-PINTEREST-INSPIRE", "description": "Pinterest inspiration search or pin publishing" }
       ],
       "every_4_hours": [
         { "agent": "media-buyer", "workflow": "WF-ADS-OPTIMIZE", "description": "Optimize ad campaigns" }

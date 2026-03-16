@@ -1,0 +1,292 @@
+{
+  "name": "WF-PINTEREST-INSPIRE",
+  "description": "Workflow Pinterest: recherche d'inspiration par moodboard, création de pins et scheduling automatique",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "On Workflow Call",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.pinterest.com/v5/search/pins?query={{ encodeURIComponent($json.search_query) }}&bookmark={{ $json.bookmark || '' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pinterestOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "search-pins",
+      "name": "Search Pinterest Pins",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 160],
+      "credentials": {
+        "pinterestOAuth2Api": { "id": "pinterest-oauth", "name": "Pinterest OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.pinterest.com/v5/boards/{{ $json.board_id }}/pins",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pinterestOAuth2Api",
+        "options": { "timeout": 15000 }
+      },
+      "id": "get-board-pins",
+      "name": "Get Board Pins",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 460],
+      "credentials": {
+        "pinterestOAuth2Api": { "id": "pinterest-oauth", "name": "Pinterest OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst mode = input.mode || 'inspire';\n\n// Thèmes d'inspiration par pilier wellness\nconst inspirationThemes = {\n  'pilates_mouvement': [\n    'pilates studio aesthetic', 'reformer pilates workout', 'pilates body goals',\n    'mat pilates exercises', 'pilates studio design minimal', 'barre workout aesthetic'\n  ],\n  'communaute_social': [\n    'wellness community events', 'women empowerment gathering', 'social club aesthetic',\n    'brunch aesthetic healthy', 'girl gang workout', 'fitness friends group'\n  ],\n  'wellness_selfcare': [\n    'self care routine aesthetic', 'wellness morning routine', 'meditation space design',\n    'healthy lifestyle flat lay', 'mindfulness journal aesthetic', 'holistic wellness'\n  ],\n  'evenements_lifestyle': [\n    'wellness retreat aesthetic', 'yoga retreat design', 'popup event minimal',\n    'lifestyle event branding', 'wellness workshop setup', 'boutique fitness event'\n  ]\n};\n\n// Board IDs par catégorie (à configurer)\nconst boardMap = {\n  'inspiration_pilates': '{{PINTEREST_BOARD_PILATES}}',\n  'inspiration_wellness': '{{PINTEREST_BOARD_WELLNESS}}',\n  'inspiration_events': '{{PINTEREST_BOARD_EVENTS}}',\n  'inspiration_branding': '{{PINTEREST_BOARD_BRANDING}}',\n  'publish_content': '{{PINTEREST_BOARD_PUBLISH}}'\n};\n\nif (mode === 'inspire') {\n  const pillar = input.content_pillar || 'pilates_mouvement';\n  const themes = inspirationThemes[pillar] || inspirationThemes['pilates_mouvement'];\n  const randomTheme = themes[Math.floor(Math.random() * themes.length)];\n  \n  return [{\n    json: {\n      mode: 'inspire',\n      search_query: input.custom_query || randomTheme,\n      content_pillar: pillar,\n      board_id: boardMap[`inspiration_${pillar.split('_')[0]}`] || boardMap['inspiration_wellness'],\n      limit: input.limit || 25\n    }\n  }];\n} else if (mode === 'publish') {\n  return [{\n    json: {\n      mode: 'publish',\n      board_id: input.board_id || boardMap['publish_content'],\n      pin_title: input.pin_title,\n      pin_description: input.pin_description,\n      pin_link: input.pin_link || 'https://www.mouvementsocialclub.com',\n      image_url: input.image_url,\n      alt_text: input.alt_text || input.pin_title,\n      content_type: input.content_type || 'pinterest_pin',\n      schedule_date: input.schedule_date || null\n    }\n  }];\n} else if (mode === 'moodboard') {\n  return [{\n    json: {\n      mode: 'moodboard',\n      board_id: input.board_id || boardMap[`inspiration_${input.content_pillar?.split('_')[0]}`],\n      content_pillar: input.content_pillar\n    }\n  }];\n}\n\nreturn [{ json: { error: 'Mode non reconnu. Utiliser: inspire, publish, moodboard' } }];"
+      },
+      "id": "prepare-pinterest",
+      "name": "Prepare Pinterest Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "inspire",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "publish",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "moodboard",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "route-mode",
+      "name": "Route by Mode",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un expert Pinterest marketing pour un club wellness/pilates à Montréal (Mouvement Social Club).\n\nTon rôle est d'analyser des pins d'inspiration et de générer:\n1. Un résumé des tendances visuelles observées\n2. Des idées de contenu adaptées à la marque\n3. Des mots-clés Pinterest SEO optimisés\n\nStyle de la marque: beige, terracotta, vert sauge, épuré, premium accessible, inclusif.\n\nRéponds en JSON: { trends: string[], content_ideas: {title, description, keywords}[], color_palette: string[], recommended_formats: string[] }"
+            },
+            {
+              "role": "user",
+              "content": "=Analyse ces {{ $json.items?.length || 0 }} pins d'inspiration pour le pilier '{{ $('prepare-pinterest').item.json.content_pillar }}':\n\nRecherche: {{ $('prepare-pinterest').item.json.search_query }}\n\nTitres des pins trouvés:\n{{ $json.items?.slice(0, 15).map(p => `- ${p.title || 'Sans titre'}: ${p.description?.substring(0, 100) || 'N/A'}`).join('\\n') }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.6,
+          "response_format": { "type": "json_object" }
+        }
+      },
+      "id": "ai-analyze-trends",
+      "name": "AI Analyze Trends",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [880, 160],
+      "credentials": {
+        "openAiApi": { "id": "openai-cred", "name": "OpenAI API" }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un expert Pinterest SEO pour Mouvement Social Club (wellness/pilates à Montréal).\n\nGénère une description de pin optimisée pour Pinterest SEO.\nInclure: mots-clés naturels, hashtags pertinents, CTA doux.\nMax 500 caractères. Ton chaleureux et inspirant.\n\nRéponds en JSON: { title: string, description: string, alt_text: string, hashtags: string[] }"
+            },
+            {
+              "role": "user",
+              "content": "=Optimise ce pin pour Pinterest:\nTitre: {{ $json.pin_title }}\nDescription actuelle: {{ $json.pin_description || 'Aucune' }}\nLien: {{ $json.pin_link }}\nType de contenu: {{ $json.content_type }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.5,
+          "response_format": { "type": "json_object" }
+        }
+      },
+      "id": "ai-optimize-pin",
+      "name": "AI Optimize Pin SEO",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [880, 460],
+      "credentials": {
+        "openAiApi": { "id": "openai-cred", "name": "OpenAI API" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.pinterest.com/v5/pins",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pinterestOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ board_id: $('prepare-pinterest').item.json.board_id, title: $json.title, description: $json.description, alt_text: $json.alt_text, link: $('prepare-pinterest').item.json.pin_link, media_source: { source_type: 'image_url', url: $('prepare-pinterest').item.json.image_url } }) }}"
+      },
+      "id": "create-pin",
+      "name": "Create Pin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 460],
+      "credentials": {
+        "pinterestOAuth2Api": { "id": "pinterest-oauth", "name": "Pinterest OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "pinterest_inspiration",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "content_pillar": "={{ $('prepare-pinterest').item.json.content_pillar }}",
+            "search_query": "={{ $('prepare-pinterest').item.json.search_query }}",
+            "trends_analysis": "={{ JSON.stringify($json) }}",
+            "created_at": "={{ new Date().toISOString() }}"
+          }
+        }
+      },
+      "id": "save-inspiration",
+      "name": "Save Inspiration to DB",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1100, 160],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-cred", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "content_calendar",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "platform": "pinterest",
+            "content_type": "pin",
+            "post_content": "={{ $('ai-optimize-pin').item.json.description }}",
+            "visual_url": "={{ $('prepare-pinterest').item.json.image_url }}",
+            "pinterest_pin_id": "={{ $json.id }}",
+            "status": "published",
+            "published_at": "={{ new Date().toISOString() }}"
+          }
+        }
+      },
+      "id": "save-pin-to-calendar",
+      "name": "Save Pin to Calendar",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1320, 460],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-cred", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-content",
+        "text": "=📌 *Pinterest Update*\n\nMode: {{ $('prepare-pinterest').item.json.mode }}\n{{ $('prepare-pinterest').item.json.mode === 'inspire' ? '🔍 Recherche: ' + $('prepare-pinterest').item.json.search_query + '\\nTendances analysées et sauvegardées!' : '📍 Pin publié: ' + $('ai-optimize-pin')?.item?.json?.title }}",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1520, 300],
+      "credentials": {
+        "slackOAuth2Api": { "id": "slack-cred", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "On Workflow Call": {
+      "main": [
+        [{ "node": "Prepare Pinterest Action", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Pinterest Action": {
+      "main": [
+        [{ "node": "Route by Mode", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Mode": {
+      "main": [
+        [{ "node": "Search Pinterest Pins", "type": "main", "index": 0 }],
+        [{ "node": "AI Optimize Pin SEO", "type": "main", "index": 0 }],
+        [{ "node": "Get Board Pins", "type": "main", "index": 0 }]
+      ]
+    },
+    "Search Pinterest Pins": {
+      "main": [
+        [{ "node": "AI Analyze Trends", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Analyze Trends": {
+      "main": [
+        [
+          { "node": "Save Inspiration to DB", "type": "main", "index": 0 },
+          { "node": "Notify Slack", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "AI Optimize Pin SEO": {
+      "main": [
+        [{ "node": "Create Pin", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Pin": {
+      "main": [
+        [
+          { "node": "Save Pin to Calendar", "type": "main", "index": 0 },
+          { "node": "Notify Slack", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Get Board Pins": {
+      "main": [
+        [{ "node": "AI Analyze Trends", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [
+    { "name": "content-creator" },
+    { "name": "pinterest" },
+    { "name": "inspiration" },
+    { "name": "visual" }
+  ]
+}
