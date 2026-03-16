@@ -33,12 +33,33 @@
         "strengths": ["réponses rapides", "classification", "modération", "résumé"],
         "best_for": "Réponses communautaires, modération, classification rapide"
       },
+      "gemini-2.5-pro": {
+        "provider": "google",
+        "cost_per_1k_input": 0.00125,
+        "cost_per_1k_output": 0.01,
+        "strengths": ["multimodal natif", "analyse vidéo/image", "raisonnement long", "gros contexte 1M tokens"],
+        "best_for": "Analyse de vidéos TikTok/Reels, audit visuel de contenu, traitement de gros volumes de données"
+      },
       "gemini-2.0-flash": {
         "provider": "google",
         "cost_per_1k_input": 0.0001,
         "cost_per_1k_output": 0.0004,
         "strengths": ["ultra rapide", "très bon marché", "multimodal", "extraction basique"],
-        "best_for": "Tâches à haut volume avec budget serré, pré-traitement de données"
+        "best_for": "Pré-traitement haut volume, extraction de données, classification ultra rapide"
+      },
+      "grok-3": {
+        "provider": "xai",
+        "cost_per_1k_input": 0.003,
+        "cost_per_1k_output": 0.015,
+        "strengths": ["accès temps réel X/Twitter", "tendances sociales live", "ton décontracté", "analyse virale"],
+        "best_for": "Veille sociale X/Twitter en temps réel, détection de tendances virales, contenu avec ton audacieux"
+      },
+      "grok-3-mini": {
+        "provider": "xai",
+        "cost_per_1k_input": 0.0003,
+        "cost_per_1k_output": 0.0005,
+        "strengths": ["rapide", "accès X/Twitter", "bon marché", "raisonnement correct"],
+        "best_for": "Monitoring social rapide, classification de mentions, veille concurrentielle légère"
       }
     },
 
@@ -50,6 +71,7 @@
           "strategy_brief": { "model": "gpt-4o", "temperature": 0.7 },
           "competitor_analysis": { "model": "gpt-4o", "temperature": 0.3 },
           "trends_analysis": { "model": "gpt-4o", "temperature": 0.5 },
+          "social_trends_realtime": { "model": "grok-3", "temperature": 0.5, "note": "Grok pour les tendances X/Twitter en temps réel" },
           "campaign_planning": { "model": "gpt-4o", "temperature": 0.6 }
         }
       },
@@ -61,6 +83,7 @@
           "social_media_posts": { "model": "claude-sonnet-4-6", "temperature": 0.8, "note": "Claude est meilleur pour le ton chaleureux et authentique" },
           "blog_articles": { "model": "claude-sonnet-4-6", "temperature": 0.7, "note": "Rédaction SEO longue = force de Claude" },
           "video_scripts": { "model": "gpt-4o", "temperature": 0.7, "note": "GPT-4o pour la structure narrative vidéo" },
+          "video_analysis": { "model": "gemini-2.5-pro", "temperature": 0.3, "note": "Gemini Pro pour analyser les vidéos concurrentes TikTok/Reels (multimodal natif)" },
           "visual_brief_canva": { "model": "gpt-4o-mini", "temperature": 0.7, "note": "Brief visuel = tâche structurée, mini suffit" },
           "pinterest_seo": { "model": "gpt-4o-mini", "temperature": 0.5, "note": "Optimisation mots-clés = tâche simple" },
           "ab_variants": { "model": "claude-sonnet-4-6", "temperature": 0.9, "note": "Variantes créatives = haute température" },
@@ -75,6 +98,8 @@
           "comment_replies": { "model": "claude-haiku-4-5", "temperature": 0.7, "note": "Rapide + empathique, parfait pour les commentaires" },
           "dm_responses": { "model": "claude-haiku-4-5", "temperature": 0.6, "note": "Réponses DM courtes et chaleureuses" },
           "engagement_captions": { "model": "claude-sonnet-4-6", "temperature": 0.8, "note": "Monter en gamme pour les captions d'engagement" },
+          "twitter_monitoring": { "model": "grok-3-mini", "temperature": 0.3, "note": "Grok Mini pour monitorer les mentions X/Twitter en temps réel" },
+          "viral_content_detection": { "model": "grok-3", "temperature": 0.4, "note": "Grok pour détecter le contenu viral et les tendances sociales" },
           "crisis_response": { "model": "gpt-4o", "temperature": 0.3, "note": "Crise = besoin de précision et nuance maximale" }
         }
       },
@@ -97,6 +122,7 @@
           "budget_optimization": { "model": "gpt-4o", "temperature": 0.2, "note": "Décisions budgétaires = précision maximale" },
           "ad_copy": { "model": "claude-sonnet-4-6", "temperature": 0.8, "note": "Claude pour le copywriting pub" },
           "audience_analysis": { "model": "gpt-4o", "temperature": 0.3 },
+          "creative_performance_visual": { "model": "gemini-2.5-pro", "temperature": 0.2, "note": "Gemini Pro pour analyser visuellement les créatives pub (quel visuel performe mieux)" },
           "performance_report": { "model": "gpt-4o-mini", "temperature": 0.2, "note": "Rapport structuré = mini suffit" }
         }
       },
@@ -129,7 +155,9 @@
         "tasks": {
           "weekly_report": { "model": "gpt-4o", "temperature": 0.3 },
           "trend_detection": { "model": "gpt-4o", "temperature": 0.4 },
-          "anomaly_detection": { "model": "gpt-4o-mini", "temperature": 0.1, "note": "Détection simple = mini" },
+          "social_sentiment_realtime": { "model": "grok-3-mini", "temperature": 0.2, "note": "Grok Mini pour le sentiment social X/Twitter en temps réel" },
+          "video_content_analytics": { "model": "gemini-2.5-pro", "temperature": 0.2, "note": "Gemini Pro pour analyser la performance visuelle du contenu vidéo" },
+          "anomaly_detection": { "model": "gemini-2.0-flash", "temperature": 0.1, "note": "Flash pour la détection d'anomalies à haut volume, ultra rapide" },
           "data_summary": { "model": "gpt-4o-mini", "temperature": 0.2 }
         }
       },
@@ -140,7 +168,7 @@
         "tasks": {
           "lead_scoring": { "model": "gpt-4o-mini", "temperature": 0.2 },
           "segmentation": { "model": "gpt-4o-mini", "temperature": 0.2 },
-          "data_enrichment": { "model": "gpt-4o-mini", "temperature": 0.1 },
+          "data_enrichment": { "model": "gemini-2.0-flash", "temperature": 0.1, "note": "Flash pour enrichissement de données en masse, très économique" },
           "churn_prediction": { "model": "gpt-4o", "temperature": 0.3, "note": "Prédiction complexe = GPT-4o" }
         }
       },
@@ -151,6 +179,7 @@
         "tasks": {
           "review_response": { "model": "claude-haiku-4-5", "temperature": 0.6, "note": "Rapide et empathique" },
           "sentiment_analysis": { "model": "claude-haiku-4-5", "temperature": 0.2 },
+          "social_mention_scan": { "model": "grok-3-mini", "temperature": 0.2, "note": "Grok Mini pour scanner les mentions sur X/Twitter" },
           "crisis_escalation": { "model": "gpt-4o", "temperature": 0.3, "note": "Crise = modèle premium" }
         }
       },
@@ -179,23 +208,29 @@
 
     "cost_optimization": {
       "estimated_daily_calls": {
-        "gpt-4o": 15,
-        "gpt-4o-mini": 45,
+        "gpt-4o": 12,
+        "gpt-4o-mini": 35,
         "claude-sonnet-4-6": 25,
         "claude-haiku-4-5": 35,
-        "gemini-2.0-flash": 0
+        "gemini-2.5-pro": 5,
+        "gemini-2.0-flash": 15,
+        "grok-3": 3,
+        "grok-3-mini": 10
       },
       "estimated_monthly_cost_usd": {
         "before_optimization": "~$85/mois (tout GPT-4o)",
-        "after_optimization": "~$42/mois (mix optimisé)",
-        "savings": "~50% de réduction"
+        "after_optimization": "~$38/mois (mix 7 modèles optimisé)",
+        "savings": "~55% de réduction"
       },
       "rules": [
-        "Utiliser GPT-4o UNIQUEMENT pour: stratégie, analyse complexe, scoring critique",
-        "Utiliser Claude Sonnet pour: rédaction créative, copywriting, emails, contenu long",
-        "Utiliser Claude Haiku pour: réponses communautaires (volume élevé), modération, sentiment",
-        "Utiliser GPT-4o-mini pour: classification, formatage JSON, tâches répétitives structurées",
-        "Réserver Gemini Flash pour: pré-traitement de données à très haut volume si nécessaire"
+        "GPT-4o: stratégie, analyse complexe, scoring critique, objection handling",
+        "Claude Sonnet: rédaction créative, copywriting, emails, blog, contenu long, ton de marque",
+        "Claude Haiku: réponses communautaires (volume élevé), modération, sentiment, check-ins",
+        "GPT-4o-mini: classification, formatage JSON, tâches répétitives structurées, meta descriptions",
+        "Gemini 2.5 Pro: analyse vidéo/image (multimodal), audit visuel des créatives pub, analyse contenu TikTok/Reels",
+        "Gemini 2.0 Flash: pré-traitement haut volume, enrichissement de données en masse, détection d'anomalies",
+        "Grok 3: tendances X/Twitter en temps réel, détection de contenu viral, veille sociale stratégique",
+        "Grok 3 Mini: monitoring mentions sociales, scan rapide X/Twitter, classification de mentions"
       ]
     },
 
