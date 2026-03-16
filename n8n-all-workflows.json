@@ -716,7 +716,7 @@
       "tags": [{"name": "actions"}, {"name": "send"}]
     },
     {
-      "name": "WF-ACUITY-BOOK",
+      "name": "WF-WEBSITE-BOOK",
       "nodes": [
         {
           "parameters": {},
@@ -766,16 +766,16 @@
             "options": {}
           },
           "id": "create-booking",
-          "name": "Create Acuity Booking",
-          "type": "n8n-nodes-base.httpRequest",
-          "typeVersion": 4.2,
+          "name": "Generate Website Booking Link",
+          "type": "n8n-nodes-base.code",
+          "typeVersion": 2,
           "position": [900, 200],
-          "credentials": {"httpBasicAuth": {"id": "acuity-credentials", "name": "Acuity API"}}
+          "parameters": {"mode": "runOnceForEachItem", "jsCode": "const input = $input.item.json;\nconst bookingInfo = input.booking_info;\nconst baseUrl = 'https://louna-co.com';\nconst params = new URLSearchParams();\nif (bookingInfo.name) {\n  const nameParts = bookingInfo.name.split(' ');\n  params.append('prenom', nameParts[0]);\n  if (nameParts.length > 1) params.append('nom', nameParts.slice(1).join(' '));\n}\nif (bookingInfo.email) params.append('email', bookingInfo.email);\nif (bookingInfo.phone) params.append('telephone', bookingInfo.phone);\nif (bookingInfo.date) params.append('date', bookingInfo.date);\nif (bookingInfo.time) params.append('heure', bookingInfo.time);\nconst bookingLink = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;\nreturn { json: {...input, booking_link: bookingLink} };"}
         },
         {
           "parameters": {
             "mode": "runOnceForEachItem",
-            "jsCode": "const input = $input.item.json;\nconst bookingInfo = input.booking_info;\n\nconst baseUrl = 'https://app.acuityscheduling.com/schedule.php';\nconst params = new URLSearchParams();\n\nif (bookingInfo.name) {\n  const nameParts = bookingInfo.name.split(' ');\n  params.append('firstName', nameParts[0]);\n  if (nameParts.length > 1) params.append('lastName', nameParts.slice(1).join(' '));\n}\nif (bookingInfo.email) params.append('email', bookingInfo.email);\nif (bookingInfo.phone) params.append('phone', bookingInfo.phone);\n\nconst bookingLink = `${baseUrl}?${params.toString()}`;\n\nconst missingFieldsMessages = {'date': 'la date souhaitee', 'time': \"l'heure preferee\", 'service': 'le type de service', 'email': 'votre adresse email', 'phone': 'votre numero de telephone'};\nconst missingList = input.missing_fields.filter(f => missingFieldsMessages[f]).map(f => missingFieldsMessages[f]);\n\nlet responseText = '';\nif (missingList.length > 0) {\n  responseText = `Pour finaliser votre reservation, j'aurais besoin de ${missingList.join(', ')}. Vous pouvez aussi reserver directement via ce lien: ${bookingLink}`;\n} else {\n  responseText = `Voici le lien pour finaliser votre reservation: ${bookingLink}`;\n}\n\nreturn {\n  json: {...input, booking_link: bookingLink, reply_text: responseText, action: 'send_link', booking_status: 'link_sent'}\n};"
+            "jsCode": "const input = $input.item.json;\nconst bookingInfo = input.booking_info;\n\nconst baseUrl = 'https://louna-co.com';\nconst params = new URLSearchParams();\n\nif (bookingInfo.name) {\n  const nameParts = bookingInfo.name.split(' ');\n  params.append('prenom', nameParts[0]);\n  if (nameParts.length > 1) params.append('nom', nameParts.slice(1).join(' '));\n}\nif (bookingInfo.email) params.append('email', bookingInfo.email);\nif (bookingInfo.phone) params.append('telephone', bookingInfo.phone);\n\nconst bookingLink = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;\n\nconst missingFieldsMessages = {'date': 'la date souhaitee', 'time': \"l'heure preferee\", 'service': 'le type de service', 'email': 'votre adresse email', 'phone': 'votre numero de telephone'};\nconst missingList = input.missing_fields.filter(f => missingFieldsMessages[f]).map(f => missingFieldsMessages[f]);\n\nlet responseText = '';\nif (missingList.length > 0) {\n  responseText = `Pour finaliser votre reservation, j'aurais besoin de ${missingList.join(', ')}. Vous pouvez aussi reserver directement sur notre site : ${bookingLink}`;\n} else {\n  responseText = `Voici le lien pour finaliser votre reservation sur notre site : ${bookingLink}`;\n}\n\nreturn {\n  json: {...input, booking_link: bookingLink, reply_text: responseText, action: 'send_link', booking_status: 'link_sent'}\n};"
           },
           "id": "generate-link",
           "name": "Generate Booking Link",
@@ -797,10 +797,10 @@
         {
           "parameters": {
             "mode": "runOnceForEachItem",
-            "jsCode": "const input = $input.item.json;\nconst bookingResult = $('Create Acuity Booking').item.json;\n\nconst confirmationId = bookingResult.id || bookingResult.confirmationNumber || 'N/A';\nconst datetime = bookingResult.datetime || `${input.booking_info.date} ${input.booking_info.time}`;\n\nconst responseText = `Votre rendez-vous est confirme pour le ${datetime}. Numero de confirmation: ${confirmationId}. A bientot !`;\n\nreturn {\n  json: {...input, booking_id: confirmationId, booking_datetime: datetime, reply_text: responseText, action: 'booking_confirmed', booking_status: 'confirmed'}\n};"
+            "jsCode": "const input = $input.item.json;\nconst bookingLink = input.booking_link || 'https://louna-co.com';\n\nconst responseText = `Super ! Voici le lien pour finaliser votre rendez-vous sur notre site : ${bookingLink} \u2014 Il ne vous reste plus qu'a confirmer vos disponibilites. A bientot !`;\n\nreturn {\n  json: {...input, booking_id: null, booking_datetime: `${input.booking_info.date || ''} ${input.booking_info.time || ''}`.trim() || null, reply_text: responseText, action: 'send_link', booking_status: 'link_sent'}\n};"
           },
           "id": "confirm-booking",
-          "name": "Confirm Booking",
+          "name": "Send Website Booking Link",
           "type": "n8n-nodes-base.code",
           "typeVersion": 2,
           "position": [1120, 200]
@@ -878,9 +878,9 @@
       "connections": {
         "Execute Workflow Trigger": {"main": [[{"node": "Check Booking Info", "type": "main", "index": 0}]]},
         "Check Booking Info": {"main": [[{"node": "Route by Completeness", "type": "main", "index": 0}]]},
-        "Route by Completeness": {"main": [[{"node": "Create Acuity Booking", "type": "main", "index": 0}], [{"node": "Generate Booking Link", "type": "main", "index": 0}], [{"node": "Request Missing Info", "type": "main", "index": 0}]]},
-        "Create Acuity Booking": {"main": [[{"node": "Confirm Booking", "type": "main", "index": 0}]]},
-        "Confirm Booking": {"main": [[{"node": "Merge Results", "type": "main", "index": 0}]]},
+        "Route by Completeness": {"main": [[{"node": "Generate Website Booking Link", "type": "main", "index": 0}], [{"node": "Generate Booking Link", "type": "main", "index": 0}], [{"node": "Request Missing Info", "type": "main", "index": 0}]]},
+        "Generate Website Booking Link": {"main": [[{"node": "Send Website Booking Link", "type": "main", "index": 0}]]},
+        "Send Website Booking Link": {"main": [[{"node": "Merge Results", "type": "main", "index": 0}]]},
         "Generate Booking Link": {"main": [[{"node": "Merge Results", "type": "main", "index": 0}]]},
         "Request Missing Info": {"main": [[{"node": "Merge Results", "type": "main", "index": 0}]]},
         "Merge Results": {"main": [[{"node": "Log Booking Attempt", "type": "main", "index": 0}]]},
@@ -888,7 +888,7 @@
         "Update Conversation": {"main": [[{"node": "Return Output", "type": "main", "index": 0}]]}
       },
       "settings": {"executionOrder": "v1"},
-      "tags": [{"name": "actions"}, {"name": "booking"}, {"name": "acuity"}]
+      "tags": [{"name": "actions"}, {"name": "booking"}, {"name": "website"}]
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "name": "WF-ACUITY-BOOK",
+  "name": "WF-WEBSITE-BOOK",
   "nodes": [
     {
       "parameters": {},
@@ -110,31 +110,19 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://acuityscheduling.com/api/v1/appointments",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBasicAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"datetime\": \"{{ $json.booking_info.date }}T{{ $json.booking_info.time }}\",\n  \"appointmentTypeID\": {{ $env.ACUITY_APPOINTMENT_TYPE_ID || 1 }},\n  \"firstName\": \"{{ $json.booking_info.name.split(' ')[0] }}\",\n  \"lastName\": \"{{ $json.booking_info.name.split(' ').slice(1).join(' ') || '' }}\",\n  \"email\": \"{{ $json.booking_info.email }}\",\n  \"phone\": \"{{ $json.booking_info.phone }}\",\n  \"notes\": \"Booked via automation from {{ $json.source }}\"\n}",
-        "options": {}
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Generate booking link for the website with prefilled info\nconst input = $input.item.json;\nconst bookingInfo = input.booking_info;\n\nconst baseUrl = 'https://louna-co.com';\nconst params = new URLSearchParams();\n\nif (bookingInfo.name) {\n  const nameParts = bookingInfo.name.split(' ');\n  params.append('prenom', nameParts[0]);\n  if (nameParts.length > 1) {\n    params.append('nom', nameParts.slice(1).join(' '));\n  }\n}\nif (bookingInfo.email) params.append('email', bookingInfo.email);\nif (bookingInfo.phone) params.append('telephone', bookingInfo.phone);\nif (bookingInfo.date) params.append('date', bookingInfo.date);\nif (bookingInfo.time) params.append('heure', bookingInfo.time);\n\nconst bookingLink = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;\n\nreturn {\n  json: {\n    ...input,\n    booking_link: bookingLink\n  }\n};"
       },
       "id": "create-booking",
-      "name": "Create Acuity Booking",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [900, 200],
-      "credentials": {
-        "httpBasicAuth": {
-          "id": "acuity-credentials",
-          "name": "Acuity API"
-        }
-      }
+      "name": "Generate Website Booking Link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Generate booking link for partial info\nconst input = $input.item.json;\nconst bookingInfo = input.booking_info;\n\n// Build Acuity scheduling link with prefilled info\nconst baseUrl = process.env.ACUITY_SCHEDULING_URL || 'https://app.acuityscheduling.com/schedule.php';\nconst params = new URLSearchParams();\n\nif (bookingInfo.name) {\n  const nameParts = bookingInfo.name.split(' ');\n  params.append('firstName', nameParts[0]);\n  if (nameParts.length > 1) {\n    params.append('lastName', nameParts.slice(1).join(' '));\n  }\n}\nif (bookingInfo.email) {\n  params.append('email', bookingInfo.email);\n}\nif (bookingInfo.phone) {\n  params.append('phone', bookingInfo.phone);\n}\n\nconst bookingLink = `${baseUrl}?${params.toString()}`;\n\n// Generate message asking for missing info\nconst missingFieldsMessages = {\n  'date': 'la date souhaitee',\n  'time': \"l'heure preferee\",\n  'service': 'le type de service',\n  'email': 'votre adresse email',\n  'phone': 'votre numero de telephone'\n};\n\nconst missingList = input.missing_fields\n  .filter(f => missingFieldsMessages[f])\n  .map(f => missingFieldsMessages[f]);\n\nlet responseText = '';\nif (missingList.length > 0) {\n  responseText = `Pour finaliser votre reservation, j'aurais besoin de ${missingList.join(', ')}. Vous pouvez aussi reserver directement via ce lien: ${bookingLink}`;\n} else {\n  responseText = `Voici le lien pour finaliser votre reservation: ${bookingLink}`;\n}\n\nreturn {\n  json: {\n    ...input,\n    booking_link: bookingLink,\n    reply_text: responseText,\n    action: 'send_link',\n    booking_status: 'link_sent'\n  }\n};"
+        "jsCode": "// Generate booking link for partial info\nconst input = $input.item.json;\nconst bookingInfo = input.booking_info;\n\n// Build website booking link with prefilled info\nconst baseUrl = 'https://louna-co.com';\nconst params = new URLSearchParams();\n\nif (bookingInfo.name) {\n  const nameParts = bookingInfo.name.split(' ');\n  params.append('prenom', nameParts[0]);\n  if (nameParts.length > 1) {\n    params.append('nom', nameParts.slice(1).join(' '));\n  }\n}\nif (bookingInfo.email) {\n  params.append('email', bookingInfo.email);\n}\nif (bookingInfo.phone) {\n  params.append('telephone', bookingInfo.phone);\n}\n\nconst bookingLink = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;\n\n// Generate message asking for missing info\nconst missingFieldsMessages = {\n  'date': 'la date souhaitee',\n  'time': \"l'heure preferee\",\n  'service': 'le type de service',\n  'email': 'votre adresse email',\n  'phone': 'votre numero de telephone'\n};\n\nconst missingList = input.missing_fields\n  .filter(f => missingFieldsMessages[f])\n  .map(f => missingFieldsMessages[f]);\n\nlet responseText = '';\nif (missingList.length > 0) {\n  responseText = `Pour finaliser votre reservation, j'aurais besoin de ${missingList.join(', ')}. Vous pouvez aussi reserver directement sur notre site : ${bookingLink}`;\n} else {\n  responseText = `Voici le lien pour finaliser votre reservation sur notre site : ${bookingLink}`;\n}\n\nreturn {\n  json: {\n    ...input,\n    booking_link: bookingLink,\n    reply_text: responseText,\n    action: 'send_link',\n    booking_status: 'link_sent'\n  }\n};"
       },
       "id": "generate-link",
       "name": "Generate Booking Link",
@@ -156,10 +144,10 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Process successful booking\nconst input = $input.item.json;\nconst bookingResult = $('Create Acuity Booking').item.json;\n\nconst confirmationId = bookingResult.id || bookingResult.confirmationNumber || 'N/A';\nconst datetime = bookingResult.datetime || `${input.booking_info.date} ${input.booking_info.time}`;\n\nconst responseText = `Votre rendez-vous est confirme pour le ${datetime}. Numero de confirmation: ${confirmationId}. A bientot !`;\n\nreturn {\n  json: {\n    ...input,\n    booking_id: confirmationId,\n    booking_datetime: datetime,\n    reply_text: responseText,\n    action: 'booking_confirmed',\n    booking_status: 'confirmed'\n  }\n};"
+        "jsCode": "// Send website booking link with complete info\nconst input = $input.item.json;\nconst bookingLink = input.booking_link || 'https://louna-co.com';\n\nconst responseText = `Super ! Voici le lien pour finaliser votre rendez-vous sur notre site : ${bookingLink} — Il ne vous reste plus qu'a confirmer vos disponibilites. A bientot !`;\n\nreturn {\n  json: {\n    ...input,\n    booking_id: null,\n    booking_datetime: `${input.booking_info.date || ''} ${input.booking_info.time || ''}`.trim() || null,\n    reply_text: responseText,\n    action: 'send_link',\n    booking_status: 'link_sent'\n  }\n};"
       },
       "id": "confirm-booking",
-      "name": "Confirm Booking",
+      "name": "Send Website Booking Link",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1120, 200]
@@ -316,7 +304,7 @@
       "main": [
         [
           {
-            "node": "Create Acuity Booking",
+            "node": "Generate Website Booking Link",
             "type": "main",
             "index": 0
           }
@@ -337,18 +325,18 @@
         ]
       ]
     },
-    "Create Acuity Booking": {
+    "Generate Website Booking Link": {
       "main": [
         [
           {
-            "node": "Confirm Booking",
+            "node": "Send Website Booking Link",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Confirm Booking": {
+    "Send Website Booking Link": {
       "main": [
         [
           {
@@ -427,7 +415,7 @@
       "name": "booking"
     },
     {
-      "name": "acuity"
+      "name": "website"
     }
   ],
   "triggerCount": 0,
