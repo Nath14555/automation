@@ -1,0 +1,217 @@
+{
+  "name": "WF-CONTENT-CANVA",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "On Workflow Call",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.canva.com/rest/v1/designs",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "canvaOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ asset_type: 'design', title: $json.design_title, design_type: $json.design_type || 'InstagramPost' }) }}"
+      },
+      "id": "create-design",
+      "name": "Create Canva Design",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 160],
+      "credentials": {
+        "canvaOAuth2Api": { "id": "canva-oauth", "name": "Canva OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.canva.com/rest/v1/designs/{{ $json.design.id }}/autofill",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "canvaOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ brand_template_id: $('prepare-design').item.json.template_id, data: $('prepare-design').item.json.autofill_data }) }}"
+      },
+      "id": "autofill-design",
+      "name": "Autofill Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 160],
+      "credentials": {
+        "canvaOAuth2Api": { "id": "canva-oauth", "name": "Canva OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.canva.com/rest/v1/exports",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "canvaOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ design_id: $json.design.id, format: { type: 'png', quality: 'high', width: $('prepare-design').item.json.export_width, height: $('prepare-design').item.json.export_height } }) }}"
+      },
+      "id": "export-design",
+      "name": "Export as PNG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 160],
+      "credentials": {
+        "canvaOAuth2Api": { "id": "canva-oauth", "name": "Canva OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.canva.com/rest/v1/exports/{{ $json.export.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "canvaOAuth2Api",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "poll-export",
+      "name": "Poll Export Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 160],
+      "credentials": {
+        "canvaOAuth2Api": { "id": "canva-oauth", "name": "Canva OAuth2" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Map content type to Canva template and dimensions\nconst templateMap = {\n  'instagram_post': { template_id: '{{CANVA_TEMPLATE_IG_POST}}', design_type: 'InstagramPost', width: 1080, height: 1080 },\n  'instagram_story': { template_id: '{{CANVA_TEMPLATE_IG_STORY}}', design_type: 'InstagramStory', width: 1080, height: 1920 },\n  'instagram_reel': { template_id: '{{CANVA_TEMPLATE_IG_REEL}}', design_type: 'InstagramStory', width: 1080, height: 1920 },\n  'facebook_post': { template_id: '{{CANVA_TEMPLATE_FB_POST}}', design_type: 'FacebookPost', width: 1200, height: 630 },\n  'facebook_story': { template_id: '{{CANVA_TEMPLATE_FB_STORY}}', design_type: 'FacebookPost', width: 1080, height: 1920 },\n  'tiktok_video': { template_id: '{{CANVA_TEMPLATE_TIKTOK}}', design_type: 'InstagramStory', width: 1080, height: 1920 },\n  'linkedin_post': { template_id: '{{CANVA_TEMPLATE_LINKEDIN}}', design_type: 'LinkedInPost', width: 1200, height: 627 },\n  'pinterest_pin': { template_id: '{{CANVA_TEMPLATE_PINTEREST}}', design_type: 'PinterestPin', width: 1000, height: 1500 },\n  'email_banner': { template_id: '{{CANVA_TEMPLATE_EMAIL}}', design_type: 'EmailHeader', width: 600, height: 200 },\n  'blog_header': { template_id: '{{CANVA_TEMPLATE_BLOG}}', design_type: 'BlogBanner', width: 1200, height: 628 }\n};\n\nconst contentType = input.content_type || 'instagram_post';\nconst config = templateMap[contentType] || templateMap['instagram_post'];\n\n// Build autofill data from AI-generated content\nconst autofillData = {};\nif (input.headline) autofillData.headline = input.headline;\nif (input.subheadline) autofillData.subheadline = input.subheadline;\nif (input.body_text) autofillData.body = input.body_text;\nif (input.cta_text) autofillData.cta = input.cta_text;\nif (input.date_text) autofillData.date = input.date_text;\nif (input.location_text) autofillData.location = input.location_text;\n\n// Brand defaults\nautofillData.brand_name = 'Mouvement Social Club';\nautofillData.website = 'www.mouvementsocialclub.com';\n\nreturn [{\n  json: {\n    design_title: input.design_title || `${contentType}_${new Date().toISOString().slice(0,10)}`,\n    design_type: config.design_type,\n    template_id: config.template_id,\n    export_width: config.width,\n    export_height: config.height,\n    autofill_data: autofillData,\n    content_type: contentType,\n    original_post_id: input.post_id || null\n  }\n}];"
+      },
+      "id": "prepare-design",
+      "name": "Prepare Design Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 160]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un directeur artistique pour Mouvement Social Club, un club wellness/pilates à Montréal. Tu génères des briefs visuels pour Canva.\n\nStyle de la marque:\n- Couleurs: beige (#F5F0EB), terracotta (#C4775B), vert sauge (#9CAF88), blanc cassé\n- Typographie: moderne, épurée, sans-serif\n- Ambiance: chaleureuse, inclusive, premium mais accessible\n- Photos: lumière naturelle, diversité corporelle, mouvement, sourires authentiques\n\nRéponds UNIQUEMENT en JSON avec: headline, subheadline, body_text, cta_text, color_mood, image_keywords[]"
+            },
+            {
+              "role": "user",
+              "content": "=Génère un brief visuel pour ce contenu:\n\nType: {{ $json.content_type }}\nPlateforme: {{ $json.platform }}\nTexte du post: {{ $json.post_content }}\nPilier: {{ $json.content_pillar }}\nObjectif: {{ $json.objective || 'engagement' }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "response_format": { "type": "json_object" }
+        }
+      },
+      "id": "ai-visual-brief",
+      "name": "AI Visual Brief",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [440, 460],
+      "credentials": {
+        "openAiApi": { "id": "openai-cred", "name": "OpenAI API" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "content_calendar",
+        "filterType": "string",
+        "filterString": "=id=eq.{{ $('prepare-design').item.json.original_post_id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "visual_url": "={{ $json.export.urls[0].url }}",
+            "visual_status": "generated",
+            "canva_design_id": "={{ $('create-design').item.json.design.id }}"
+          }
+        }
+      },
+      "id": "update-calendar",
+      "name": "Update Content Calendar",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1300, 460],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-cred", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-content",
+        "text": "=🎨 Visuel généré!\n*{{ $('prepare-design').item.json.design_title }}*\nType: {{ $('prepare-design').item.json.content_type }}\nDimensions: {{ $('prepare-design').item.json.export_width }}x{{ $('prepare-design').item.json.export_height }}\nURL: {{ $json.export.urls[0].url }}",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1520, 300],
+      "credentials": {
+        "slackOAuth2Api": { "id": "slack-cred", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "On Workflow Call": {
+      "main": [
+        [
+          { "node": "Prepare Design Config", "type": "main", "index": 0 },
+          { "node": "AI Visual Brief", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Prepare Design Config": {
+      "main": [
+        [{ "node": "Create Canva Design", "type": "main", "index": 0 }]
+      ]
+    },
+    "Create Canva Design": {
+      "main": [
+        [{ "node": "Autofill Template", "type": "main", "index": 0 }]
+      ]
+    },
+    "Autofill Template": {
+      "main": [
+        [{ "node": "Export as PNG", "type": "main", "index": 0 }]
+      ]
+    },
+    "Export as PNG": {
+      "main": [
+        [{ "node": "Poll Export Status", "type": "main", "index": 0 }]
+      ]
+    },
+    "Poll Export Status": {
+      "main": [
+        [
+          { "node": "Update Content Calendar", "type": "main", "index": 0 },
+          { "node": "Notify Slack", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [
+    { "name": "content-creator" },
+    { "name": "canva" },
+    { "name": "visual" }
+  ]
+}
