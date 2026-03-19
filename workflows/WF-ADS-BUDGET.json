@@ -1,0 +1,225 @@
+{
+  "name": "WF-ADS-BUDGET",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v18.0/act_{{ $env.META_AD_ACCOUNT_ID }}/insights?fields=campaign_id,campaign_name,spend,impressions,clicks,actions,cost_per_action_type,ctr,cpc,cpm&date_preset=last_7d&level=campaign&access_token={{ $env.META_ADS_ACCESS_TOKEN }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-meta-7d",
+      "name": "Fetch Meta Ads 7 Days",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://googleads.googleapis.com/v15/customers/{{ $env.GOOGLE_ADS_CUSTOMER_ID }}/googleAds:searchStream",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"query\": \"SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.cost_per_conversion FROM campaign WHERE segments.date DURING LAST_7_DAYS AND campaign.status = 'ENABLED'\" }",
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-google-7d",
+      "name": "Fetch Google Ads 7 Days",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 400],
+      "credentials": {
+        "httpHeaderAuth": { "id": "google-ads-credentials", "name": "Google Ads API" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "ad_budget_history",
+        "returnAll": false,
+        "limit": 30,
+        "filterType": "string",
+        "filterString": "created_at=gte.{{ new Date(Date.now() - 30*24*60*60*1000).toISOString().slice(0,10) }}&order=created_at.desc"
+      },
+      "id": "fetch-budget-history",
+      "name": "Fetch Budget History",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 580],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const metaData = $('Fetch Meta Ads 7 Days').item.json;\nconst googleData = $('Fetch Google Ads 7 Days').item.json;\nconst budgetHistory = $('Fetch Budget History').all().map(i => i.json);\n\nconst dailyBudget = parseFloat($env.DAILY_AD_BUDGET || 50);\nconst targetCPA = parseFloat($env.TARGET_CPA || 15);\n\n// Process Meta campaigns - 7 day performance\nconst metaCampaigns = (metaData.data || []).map(c => {\n  const conversions = (c.actions || []).find(a => a.action_type === 'offsite_conversion');\n  const spend = parseFloat(c.spend || 0);\n  const convCount = parseInt(conversions?.value || 0);\n  return {\n    platform: 'meta',\n    campaign_id: c.campaign_id,\n    campaign_name: c.campaign_name,\n    spend_7d: spend,\n    avg_daily_spend: spend / 7,\n    impressions: parseInt(c.impressions || 0),\n    clicks: parseInt(c.clicks || 0),\n    conversions: convCount,\n    ctr: parseFloat(c.ctr || 0),\n    cpc: parseFloat(c.cpc || 0),\n    cpa: convCount > 0 ? spend / convCount : 999,\n    roas_score: convCount > 0 ? (convCount * targetCPA) / spend : 0\n  };\n});\n\n// Process Google campaigns\nconst googleCampaigns = (googleData.results || []).map(r => {\n  const m = r.metrics || {};\n  const spend = parseInt(m.costMicros || 0) / 1000000;\n  const convCount = parseFloat(m.conversions || 0);\n  return {\n    platform: 'google',\n    campaign_id: r.campaign?.id,\n    campaign_name: r.campaign?.name,\n    spend_7d: spend,\n    avg_daily_spend: spend / 7,\n    impressions: parseInt(m.impressions || 0),\n    clicks: parseInt(m.clicks || 0),\n    conversions: convCount,\n    ctr: m.impressions > 0 ? (m.clicks / m.impressions * 100) : 0,\n    cpc: m.clicks > 0 ? spend / parseInt(m.clicks) : 0,\n    cpa: convCount > 0 ? spend / convCount : 999,\n    roas_score: convCount > 0 ? (convCount * targetCPA) / spend : 0\n  };\n});\n\nconst allCampaigns = [...metaCampaigns, ...googleCampaigns];\nconst totalSpend7d = allCampaigns.reduce((s, c) => s + c.spend_7d, 0);\nconst totalConversions = allCampaigns.reduce((s, c) => s + c.conversions, 0);\n\n// Classify campaigns by performance tier\nconst tiers = {\n  star: allCampaigns.filter(c => c.cpa < targetCPA * 0.7 && c.conversions >= 2),\n  good: allCampaigns.filter(c => c.cpa >= targetCPA * 0.7 && c.cpa <= targetCPA && c.conversions >= 1),\n  underperform: allCampaigns.filter(c => c.cpa > targetCPA && c.cpa <= targetCPA * 2),\n  waste: allCampaigns.filter(c => c.cpa > targetCPA * 2 || (c.spend_7d > dailyBudget && c.conversions === 0))\n};\n\nreturn {\n  json: {\n    daily_budget: dailyBudget,\n    target_cpa: targetCPA,\n    campaigns: allCampaigns,\n    tiers: {\n      star: tiers.star.map(c => c.campaign_id),\n      good: tiers.good.map(c => c.campaign_id),\n      underperform: tiers.underperform.map(c => c.campaign_id),\n      waste: tiers.waste.map(c => c.campaign_id)\n    },\n    summary: {\n      total_campaigns: allCampaigns.length,\n      total_spend_7d: totalSpend7d,\n      avg_daily_spend: totalSpend7d / 7,\n      total_conversions: totalConversions,\n      avg_cpa: totalConversions > 0 ? totalSpend7d / totalConversions : null,\n      budget_utilization: (totalSpend7d / 7) / dailyBudget\n    },\n    budget_history: budgetHistory.slice(0, 7)\n  }\n};"
+      },
+      "id": "analyze-performance",
+      "name": "Analyze 7-Day Performance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un expert en gestion de budget publicitaire pour un club wellness/pilates a Montreal.\n\nTa mission: reallouer le budget quotidien entre les campagnes pour maximiser les conversions.\n\nRegles strictes:\n1. Budget total quotidien = ne JAMAIS depasser le daily_budget\n2. Campagnes 'star' (CPA < 70% target): augmenter budget de 20-40%\n3. Campagnes 'good' (CPA dans target): maintenir budget\n4. Campagnes 'underperform' (CPA > target mais < 2x): reduire de 20-30%\n5. Campagnes 'waste' (CPA > 2x target ou 0 conversion): reduire de 50% ou pauser\n6. Garder 10% du budget en reserve pour les nouvelles campagnes\n7. Ne pas faire de changements trop brusques (max +/- 40% par jour)\n\nReponds en JSON:\n{\n  \"budget_plan\": [\n    { \"campaign_id\": \"...\", \"campaign_name\": \"...\", \"platform\": \"...\", \"current_daily\": 0, \"new_daily\": 0, \"change_pct\": 0, \"reason\": \"...\" }\n  ],\n  \"total_allocated\": 0,\n  \"reserve\": 0,\n  \"key_decisions\": [\"...\"],\n  \"risk_alerts\": [\"...\"],\n  \"expected_impact\": { \"estimated_conversions_change\": \"+X%\", \"estimated_cpa_change\": \"-X%\" }\n}"
+            },
+            {
+              "role": "user",
+              "content": "=Budget quotidien: {{ $json.daily_budget }}$\nCPA cible: {{ $json.target_cpa }}$\n\nPerformance 7 jours:\n{{ JSON.stringify($json.campaigns, null, 2) }}\n\nClassification:\n- Stars: {{ JSON.stringify($json.tiers.star) }}\n- Good: {{ JSON.stringify($json.tiers.good) }}\n- Underperform: {{ JSON.stringify($json.tiers.underperform) }}\n- Waste: {{ JSON.stringify($json.tiers.waste) }}\n\nResume: {{ JSON.stringify($json.summary) }}\n\nHistorique budget recent: {{ JSON.stringify($json.budget_history) }}\n\nGenere le plan de reallocation budgetaire pour aujourd'hui:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.2,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "ai-budget-plan",
+      "name": "AI Budget Reallocation",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [940, 300],
+      "credentials": {
+        "openAiApi": { "id": "openai-credentials", "name": "OpenAI" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const aiResponse = $input.item.json.message.content;\nlet budgetPlan;\ntry { budgetPlan = JSON.parse(aiResponse); } catch (e) { budgetPlan = { error: 'Parse failed', raw: aiResponse }; }\n\nconst perfData = $('Analyze 7-Day Performance').item.json;\n\n// Build API calls for budget updates\nconst metaUpdates = (budgetPlan.budget_plan || []).filter(c => c.platform === 'meta' && c.change_pct !== 0);\nconst googleUpdates = (budgetPlan.budget_plan || []).filter(c => c.platform === 'google' && c.change_pct !== 0);\n\nreturn {\n  json: {\n    report_type: 'budget_reallocation',\n    generated_at: new Date().toISOString(),\n    agent_id: 'media-buyer',\n    workflow_id: 'WF-ADS-BUDGET',\n    daily_budget: perfData.daily_budget,\n    budget_plan: budgetPlan,\n    meta_updates: metaUpdates,\n    google_updates: googleUpdates,\n    total_changes: metaUpdates.length + googleUpdates.length,\n    performance_summary: perfData.summary\n  }\n};"
+      },
+      "id": "format-plan",
+      "name": "Format Budget Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "ad_budget_history",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "media-buyer" },
+            { "fieldName": "daily_budget", "fieldValue": "={{ $json.daily_budget }}" },
+            { "fieldName": "budget_plan", "fieldValue": "={{ JSON.stringify($json.budget_plan) }}" },
+            { "fieldName": "total_changes", "fieldValue": "={{ $json.total_changes }}" },
+            { "fieldName": "performance_summary", "fieldValue": "={{ JSON.stringify($json.performance_summary) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-budget-plan",
+      "name": "Save Budget Plan",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1380, 200],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "media-buyer" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-ADS-BUDGET" },
+            { "fieldName": "action", "fieldValue": "budget_reallocation" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ changes: $json.total_changes, plan: $json.budget_plan?.key_decisions }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1380, 400],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#marketing-reports",
+        "text": "=:moneybag: *Budget Ads - Reallocation Quotidienne*\n\n*Budget quotidien:* {{ $json.daily_budget }}$\n*Utilisation 7j:* {{ ($json.performance_summary.budget_utilization * 100).toFixed(0) }}%\n*CPA moyen:* {{ $json.performance_summary.avg_cpa?.toFixed(2) || 'N/A' }}$\n\n*Decisions cles:*\n{{ $json.budget_plan.key_decisions?.map((d, i) => `${i+1}. ${d}`).join('\\n') || 'Aucun changement' }}\n\n*Changements:* {{ $json.total_changes }} campagnes ajustees\n*Impact estime:* {{ $json.budget_plan.expected_impact?.estimated_conversions_change || 'N/A' }} conversions\n\n{{ $json.budget_plan.risk_alerts?.length > 0 ? ':warning: *Alertes:*\\n' + $json.budget_plan.risk_alerts.join('\\n') : '' }}\n\n_Genere par AI Media Buyer_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [1600, 300],
+      "credentials": {
+        "slackApi": { "id": "slack-credentials", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 8AM": {
+      "main": [
+        [
+          { "node": "Fetch Meta Ads 7 Days", "type": "main", "index": 0 },
+          { "node": "Fetch Google Ads 7 Days", "type": "main", "index": 0 },
+          { "node": "Fetch Budget History", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Meta Ads 7 Days": {
+      "main": [[{ "node": "Analyze 7-Day Performance", "type": "main", "index": 0 }]]
+    },
+    "Fetch Google Ads 7 Days": {
+      "main": [[{ "node": "Analyze 7-Day Performance", "type": "main", "index": 0 }]]
+    },
+    "Fetch Budget History": {
+      "main": [[{ "node": "Analyze 7-Day Performance", "type": "main", "index": 0 }]]
+    },
+    "Analyze 7-Day Performance": {
+      "main": [[{ "node": "AI Budget Reallocation", "type": "main", "index": 0 }]]
+    },
+    "AI Budget Reallocation": {
+      "main": [[{ "node": "Format Budget Plan", "type": "main", "index": 0 }]]
+    },
+    "Format Budget Plan": {
+      "main": [
+        [
+          { "node": "Save Budget Plan", "type": "main", "index": 0 },
+          { "node": "Log Action", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Save Budget Plan": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "ads" }, { "name": "budget" }, { "name": "agent-05" }],
+  "triggerCount": 1,
+  "pinData": {}
+}

@@ -1,0 +1,261 @@
+{
+  "name": "WF-SALES-FOLLOWUP",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * 1-5" }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekdays 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "returnAll": false,
+        "limit": 50,
+        "filterType": "string",
+        "filterString": "qualification=in.(hot,warm)&lifecycle_stage=in.(lead,mql)&last_contacted_at=lt.{{ new Date(Date.now() - 24*60*60*1000).toISOString() }}&order=lead_score.desc"
+      },
+      "id": "fetch-leads",
+      "name": "Fetch Leads to Follow Up",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "conversations",
+        "returnAll": false,
+        "limit": 100,
+        "filterType": "string",
+        "filterString": "created_at=gte.{{ new Date(Date.now() - 14*24*60*60*1000).toISOString() }}&order=created_at.desc"
+      },
+      "id": "fetch-conversations",
+      "name": "Fetch Recent Conversations",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 500],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const leads = $('Fetch Leads to Follow Up').all().map(i => i.json);\nconst conversations = $('Fetch Recent Conversations').all().map(i => i.json);\n\nif (leads.length === 0) {\n  return [{ json: { no_leads: true, message: 'Aucun lead a relancer' } }];\n}\n\n// Enrich leads with conversation context\nconst enrichedLeads = leads.map(lead => {\n  const leadConvos = conversations.filter(c => \n    c.contact_email === lead.email || c.contact_id === lead.id\n  );\n  \n  const daysSinceContact = lead.last_contacted_at \n    ? Math.floor((Date.now() - new Date(lead.last_contacted_at).getTime()) / (24*60*60*1000))\n    : 999;\n  \n  const totalMessages = leadConvos.reduce((sum, c) => sum + (c.message_count || 1), 0);\n  \n  // Determine follow-up urgency\n  let urgency = 'normal';\n  if (lead.qualification === 'hot' && daysSinceContact >= 1) urgency = 'high';\n  if (lead.qualification === 'hot' && daysSinceContact >= 3) urgency = 'critical';\n  if (lead.qualification === 'warm' && daysSinceContact >= 5) urgency = 'high';\n  \n  // Determine follow-up type\n  let followUpType = 'nurture';\n  if (lead.qualification === 'hot' && totalMessages < 3) followUpType = 'first_followup';\n  else if (lead.qualification === 'hot' && totalMessages >= 3) followUpType = 'closing_push';\n  else if (lead.qualification === 'warm' && totalMessages < 2) followUpType = 'value_offer';\n  else if (lead.qualification === 'warm' && totalMessages >= 2) followUpType = 'social_proof';\n  \n  return {\n    lead_id: lead.id,\n    name: `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Prospect',\n    email: lead.email,\n    phone: lead.phone || null,\n    source: lead.source,\n    score: lead.lead_score,\n    qualification: lead.qualification,\n    interest: lead.tags || [],\n    days_since_contact: daysSinceContact,\n    total_messages: totalMessages,\n    last_message: leadConvos[0]?.last_message || null,\n    urgency,\n    follow_up_type: followUpType,\n    preferred_channel: lead.phone ? 'sms' : 'email'\n  };\n});\n\n// Sort: critical first, then high, then normal\nconst sorted = enrichedLeads.sort((a, b) => {\n  const urgencyOrder = { critical: 0, high: 1, normal: 2 };\n  return (urgencyOrder[a.urgency] || 2) - (urgencyOrder[b.urgency] || 2);\n});\n\nreturn sorted.map(lead => ({ json: lead }));"
+      },
+      "id": "prepare-followups",
+      "name": "Prepare Follow-up Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.no_leads }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-has-leads",
+      "name": "Has Leads?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [920, 400]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-6",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es le Sales Closer de Mouvement Social Club, un club wellness/pilates premium a Montreal.\n\nTon style:\n- Chaleureux, jamais agressif\n- Tu tutoies naturellement\n- Tu inspires et motives\n- Tu personnalises chaque message selon le contexte du lead\n- Tu utilises le prenom quand disponible\n\nTypes de follow-up:\n- first_followup: Premier suivi apres interet initial. Rappeler la valeur, proposer un cours d'essai.\n- closing_push: Lead chaud deja engage. Creer l'urgence douce, offre limitee, temoignage.\n- value_offer: Lead tiede. Partager du contenu de valeur (article, video, conseil wellness).\n- social_proof: Lead tiede engage. Temoignage client, resultats, photos avant/apres.\n- nurture: Lead a garder au chaud. Newsletter, evenement a venir, contenu inspirant.\n\nReponds en JSON:\n{\n  \"subject\": \"Objet email (max 50 chars, engageant)\",\n  \"message\": \"Le message complet personnalise\",\n  \"cta\": \"L'appel a l'action principal\",\n  \"cta_link\": \"lien vers booking/site\",\n  \"channel\": \"email ou sms\",\n  \"follow_up_delay_hours\": 48,\n  \"internal_note\": \"Note interne pour le CRM\"\n}"
+            },
+            {
+              "role": "user",
+              "content": "=Genere un message de follow-up pour ce lead:\n\nNom: {{ $json.name }}\nScore: {{ $json.score }}/100\nQualification: {{ $json.qualification }}\nSource: {{ $json.source }}\nInterets: {{ JSON.stringify($json.interest) }}\nJours depuis dernier contact: {{ $json.days_since_contact }}\nMessages echanges: {{ $json.total_messages }}\nDernier message: {{ $json.last_message || 'Aucun' }}\nUrgence: {{ $json.urgency }}\nType de follow-up: {{ $json.follow_up_type }}\nCanal prefere: {{ $json.preferred_channel }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.7,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "ai-generate-followup",
+      "name": "AI Generate Follow-up",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1140, 300],
+      "credentials": {
+        "openAiApi": { "id": "openai-credentials", "name": "OpenAI" }
+      },
+      "notes": "Uses Claude Sonnet via ai-models config for empathetic sales copy"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const lead = $('Has Leads?').item.json;\nconst aiResponse = $input.item.json.message.content;\nlet followUp;\ntry { followUp = JSON.parse(aiResponse); } catch (e) { followUp = { error: 'Parse failed' }; }\n\nreturn {\n  json: {\n    lead_id: lead.lead_id,\n    lead_name: lead.name,\n    lead_email: lead.email,\n    lead_phone: lead.phone,\n    qualification: lead.qualification,\n    urgency: lead.urgency,\n    follow_up_type: lead.follow_up_type,\n    ...followUp,\n    generated_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "format-message",
+      "name": "Format Follow-up Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "follow_up_queue",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "lead_id", "fieldValue": "={{ $json.lead_id }}" },
+            { "fieldName": "channel", "fieldValue": "={{ $json.channel }}" },
+            { "fieldName": "subject", "fieldValue": "={{ $json.subject }}" },
+            { "fieldName": "message", "fieldValue": "={{ $json.message }}" },
+            { "fieldName": "cta", "fieldValue": "={{ $json.cta }}" },
+            { "fieldName": "urgency", "fieldValue": "={{ $json.urgency }}" },
+            { "fieldName": "follow_up_type", "fieldValue": "={{ $json.follow_up_type }}" },
+            { "fieldName": "status", "fieldValue": "pending_approval" },
+            { "fieldName": "scheduled_at", "fieldValue": "={{ new Date().toISOString() }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-to-queue",
+      "name": "Save to Follow-up Queue",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1580, 200],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filterType": "string",
+        "filterString": "id=eq.{{ $json.lead_id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "last_contacted_at": "={{ new Date().toISOString() }}",
+            "follow_up_count": "={{ ($json.total_messages || 0) + 1 }}"
+          }
+        }
+      },
+      "id": "update-lead",
+      "name": "Update Lead Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1580, 400],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "agent_logs",
+        "dataToSend": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "agent_id", "fieldValue": "sales-closer" },
+            { "fieldName": "workflow_id", "fieldValue": "WF-SALES-FOLLOWUP" },
+            { "fieldName": "action", "fieldValue": "follow_up_generated" },
+            { "fieldName": "status", "fieldValue": "completed" },
+            { "fieldName": "output_data", "fieldValue": "={{ JSON.stringify({ lead: $json.lead_name, type: $json.follow_up_type, urgency: $json.urgency, channel: $json.channel }) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1800, 300],
+      "credentials": {
+        "supabaseApi": { "id": "supabase-credentials", "name": "Supabase" }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#wellness-sales",
+        "text": "=:dart: *Follow-up Sales - Resume quotidien*\n\n*Lead:* {{ $json.lead_name }} ({{ $json.qualification }})\n*Score:* {{ $('Has Leads?').item.json.score }}/100\n*Urgence:* {{ $json.urgency }}\n*Type:* {{ $json.follow_up_type }}\n*Canal:* {{ $json.channel }}\n\n*Message genere:*\n> {{ $json.message?.substring(0, 200) }}...\n\n*Status:* En attente d'approbation dans la queue\n\n_Genere par AI Sales Closer_",
+        "otherOptions": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [2020, 300],
+      "credentials": {
+        "slackApi": { "id": "slack-credentials", "name": "Slack" }
+      }
+    }
+  ],
+  "connections": {
+    "Weekdays 9AM": {
+      "main": [
+        [
+          { "node": "Fetch Leads to Follow Up", "type": "main", "index": 0 },
+          { "node": "Fetch Recent Conversations", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Leads to Follow Up": {
+      "main": [[{ "node": "Prepare Follow-up Queue", "type": "main", "index": 0 }]]
+    },
+    "Fetch Recent Conversations": {
+      "main": [[{ "node": "Prepare Follow-up Queue", "type": "main", "index": 0 }]]
+    },
+    "Prepare Follow-up Queue": {
+      "main": [[{ "node": "Has Leads?", "type": "main", "index": 0 }]]
+    },
+    "Has Leads?": {
+      "main": [[{ "node": "AI Generate Follow-up", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Follow-up": {
+      "main": [[{ "node": "Format Follow-up Message", "type": "main", "index": 0 }]]
+    },
+    "Format Follow-up Message": {
+      "main": [
+        [
+          { "node": "Save to Follow-up Queue", "type": "main", "index": 0 },
+          { "node": "Update Lead Status", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Save to Follow-up Queue": {
+      "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]]
+    },
+    "Log Action": {
+      "main": [[{ "node": "Notify Slack", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [{ "name": "sales" }, { "name": "followup" }, { "name": "agent-07" }],
+  "triggerCount": 1,
+  "pinData": {}
+}
