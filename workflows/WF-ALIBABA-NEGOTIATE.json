@@ -1,0 +1,546 @@
+{
+  "name": "WF-ALIBABA-NEGOTIATE",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "negotiate-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "conversations",
+        "filterType": "string",
+        "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+        "options": {}
+      },
+      "id": "load-conversation",
+      "name": "Load Conversation",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "tableId": "alibaba_negotiations",
+        "filterType": "string",
+        "filterString": "conversation_id=eq.{{ $('Execute Workflow Trigger').item.json.conversation_id }}",
+        "options": {}
+      },
+      "id": "load-negotiation",
+      "name": "Load Negotiation State",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 500],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Merge conversation and negotiation state\nconst trigger = $('Execute Workflow Trigger').item.json;\nconst conversation = $('Load Conversation').first()?.json || {};\nconst negotiation = $('Load Negotiation State').first()?.json || null;\n\nconst negData = trigger.negotiation_data || {};\n\n// Determine negotiation status\nlet negStatus = negotiation?.negotiation_status || 'initial_contact';\nlet round = negotiation?.negotiation_round || 0;\n\n// Update status based on message content\nif (negData.is_acceptance) {\n  negStatus = 'agreed';\n} else if (negData.is_counter_offer) {\n  negStatus = 'counter_offer';\n  round++;\n} else if (negData.is_offer) {\n  negStatus = round === 0 ? 'first_offer' : 'negotiating';\n  round++;\n} else if (negData.is_inquiry_response) {\n  negStatus = 'price_inquiry';\n}\n\n// Track best price\nconst detectedPrice = negData.detected_prices?.[0] || negData.price_from_meta;\nlet bestOffer = negotiation?.best_offer;\nif (detectedPrice) {\n  if (!bestOffer || detectedPrice < bestOffer) {\n    bestOffer = detectedPrice;\n  }\n}\n\n// Build price history entry\nlet priceHistory = negotiation?.price_history || [];\nif (detectedPrice) {\n  priceHistory.push({\n    price: detectedPrice,\n    round: round,\n    direction: 'seller',\n    timestamp: new Date().toISOString()\n  });\n}\n\nreturn {\n  json: {\n    ...trigger,\n    conversation_exists: !!conversation.conversation_id,\n    current_stage: conversation.stage || 'new',\n    message_count: conversation.message_count || 0,\n    conversation_history: conversation.history || [],\n    negotiation_exists: !!negotiation,\n    negotiation_status: negStatus,\n    negotiation_round: round,\n    initial_price: negotiation?.initial_price || detectedPrice,\n    target_price: negotiation?.target_price,\n    current_offer: detectedPrice || negotiation?.current_offer,\n    best_offer: bestOffer,\n    price_history: priceHistory,\n    moq: negData.moq_from_meta || negotiation?.moq,\n    quantity: negData.detected_quantities?.[0] || negotiation?.quantity,\n    detected_incoterm: negData.detected_incoterm || negotiation?.incoterm,\n    max_rounds: negotiation?.max_rounds || 5\n  }\n};"
+      },
+      "id": "merge-state",
+      "name": "Merge State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 400]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Determine negotiation strategy and build context for AI\nconst input = $input.item.json;\n\n// Calculate negotiation leverage\nconst round = input.negotiation_round;\nconst maxRounds = input.max_rounds;\nconst initialPrice = input.initial_price;\nconst targetPrice = input.target_price;\nconst currentOffer = input.current_offer;\nconst bestOffer = input.best_offer;\n\n// Strategy determination\nlet strategy = 'standard';\nlet aggressiveness = 0.5; // 0 = very soft, 1 = very aggressive\nlet targetDiscount = 0.15; // Default: aim for 15% discount\n\nif (round === 0) {\n  strategy = 'initial_inquiry';\n  aggressiveness = 0.3;\n} else if (round === 1) {\n  strategy = 'first_counter';\n  aggressiveness = 0.7;\n  targetDiscount = 0.25; // Ask for more at first\n} else if (round >= 2 && round < maxRounds - 1) {\n  strategy = 'negotiate';\n  aggressiveness = 0.5;\n  targetDiscount = 0.18;\n} else if (round >= maxRounds - 1) {\n  strategy = 'final_push';\n  aggressiveness = 0.4;\n  targetDiscount = 0.12;\n}\n\n// If we have a target price, calculate needed discount\nlet suggestedCounterPrice = null;\nif (currentOffer && targetPrice) {\n  // If current offer is already at or below target, accept\n  if (currentOffer <= targetPrice) {\n    strategy = 'accept';\n  } else {\n    // Counter between target and current, moving up each round\n    const progress = Math.min(round / maxRounds, 0.8);\n    suggestedCounterPrice = targetPrice + (currentOffer - targetPrice) * progress * 0.3;\n  }\n} else if (currentOffer) {\n  // No target price set - use standard discount target\n  suggestedCounterPrice = currentOffer * (1 - targetDiscount);\n}\n\n// Build negotiation context summary\nlet priceHistorySummary = '';\nif (input.price_history && input.price_history.length > 0) {\n  priceHistorySummary = input.price_history\n    .map(p => `Round ${p.round}: ${p.direction} proposed ${p.price}`)\n    .join('\\n');\n}\n\nreturn {\n  json: {\n    ...input,\n    strategy: strategy,\n    aggressiveness: aggressiveness,\n    target_discount_pct: targetDiscount * 100,\n    suggested_counter_price: suggestedCounterPrice ? Math.round(suggestedCounterPrice * 100) / 100 : null,\n    price_history_summary: priceHistorySummary,\n    should_accept: strategy === 'accept',\n    is_stalled: round >= maxRounds\n  }\n};"
+      },
+      "id": "determine-strategy",
+      "name": "Determine Strategy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.should_accept }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "accept"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.is_stalled }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "handoff"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.should_accept }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.is_stalled }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "negotiate"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-strategy",
+      "name": "Route Strategy",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1180, 400]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "Tu es un expert en negociation B2B avec des fournisseurs Alibaba. Tu negocies au nom d'un acheteur pour obtenir le meilleur prix possible tout en maintenant une relation professionnelle.\n\nREGLES DE NEGOCIATION:\n1. Sois toujours poli et professionnel - les vendeurs Alibaba apprecient le respect\n2. Mentionne la concurrence subtilement (\"j'ai recu d'autres devis\", \"un autre fournisseur propose...\")\n3. Demande des remises volume quand pertinent\n4. Negocie les frais de port et les conditions de paiement, pas seulement le prix unitaire\n5. Demande des echantillons avant de passer commande\n6. Sois ferme mais raisonnable - ne demande pas des prix irrealistes\n7. Utilise les techniques: ancrage bas, bundle, urgence d'achat, relation long terme\n8. Reponds en anglais (langue commune sur Alibaba) sauf si le vendeur ecrit en francais\n\nSTRATEGIES PAR PHASE:\n- initial_inquiry: Pose des questions sur le produit, MOQ, delais. Ne parle pas encore de prix.\n- first_counter: Propose un prix 20-30% en dessous. Mentionne la concurrence.\n- negotiate: Fais des concessions graduelles. Negocie aussi shipping, payment terms, lead time.\n- final_push: Derniere tentative. Propose un volume plus grand pour un meilleur prix.\n\nRetourne UNIQUEMENT le texte du message a envoyer au vendeur, sans guillemets ni formatage."
+            },
+            {
+              "role": "user",
+              "content": "=CONTEXTE DE NEGOCIATION:\nStrategie: {{ $json.strategy }}\nAgressivite: {{ $json.aggressiveness }}/1.0\nRound de negociation: {{ $json.negotiation_round }}\n\nMESSAGE DU VENDEUR:\n{{ $json.message }}\n\nDONNEES:\n- Prix initial detecte: {{ $json.initial_price || 'Non defini' }}\n- Offre actuelle du vendeur: {{ $json.current_offer || 'Aucune' }}\n- Notre prix cible: {{ $json.target_price || 'Non defini' }}\n- Contre-proposition suggeree: {{ $json.suggested_counter_price || 'A determiner' }}\n- MOQ: {{ $json.moq || 'Non precise' }}\n- Quantite souhaitee: {{ $json.quantity || 'Non precisee' }}\n- Incoterm: {{ $json.detected_incoterm || 'Non precise' }}\n\nHISTORIQUE DES PRIX:\n{{ $json.price_history_summary || 'Premier contact' }}\n\nHISTORIQUE CONVERSATION:\n{{ JSON.stringify(($json.conversation_history || []).slice(-5)) }}\n\nGenere la reponse de negociation appropriee:"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.6
+        }
+      },
+      "id": "generate-negotiation",
+      "name": "Generate Negotiation Reply",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1420, 500],
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Prepare acceptance response\nconst input = $input.item.json;\n\nconst acceptMessage = `Thank you for your offer! We're happy to accept the price of $${input.current_offer} per ${input.unit || 'unit'}. ` +\n  `Could you please confirm the following details:\\n` +\n  `- Quantity: ${input.quantity || 'to be confirmed'}\\n` +\n  `- Shipping: ${input.detected_incoterm || 'to be discussed'}\\n` +\n  `- Payment terms: to be confirmed\\n` +\n  `- Lead time: to be confirmed\\n\\n` +\n  `Please send us a proforma invoice so we can proceed. Looking forward to a successful partnership!`;\n\nreturn {\n  json: {\n    reply_text: acceptMessage,\n    action: 'send',\n    handoff: false,\n    stage: 'agreed',\n    intent: 'negotiation_accept',\n    negotiation_status: 'agreed',\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id,\n    negotiation_round: input.negotiation_round,\n    final_price: input.current_offer,\n    price_history: input.price_history\n  }\n};"
+      },
+      "id": "prepare-accept",
+      "name": "Prepare Accept",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Prepare handoff - negotiation stalled\nconst input = $input.item.json;\n\nconst handoffMessage = `Thank you for your patience. Let me check with my team on this and get back to you shortly.`;\n\nreturn {\n  json: {\n    reply_text: handoffMessage,\n    action: 'handoff',\n    handoff: true,\n    handoff_reason: 'negotiation_stalled_max_rounds',\n    stage: 'negotiating',\n    intent: 'negotiation_stalled',\n    negotiation_status: 'stalled',\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id,\n    negotiation_round: input.negotiation_round,\n    best_offer: input.best_offer,\n    price_history: input.price_history\n  }\n};"
+      },
+      "id": "prepare-handoff-negotiate",
+      "name": "Prepare Handoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Prepare negotiation reply\nconst input = $input.item.json;\nconst replyText = $('Generate Negotiation Reply').item.json.message.content;\n\n// Update price history with our counter\nlet priceHistory = input.price_history || [];\nif (input.suggested_counter_price) {\n  priceHistory.push({\n    price: input.suggested_counter_price,\n    round: input.negotiation_round,\n    direction: 'buyer',\n    timestamp: new Date().toISOString()\n  });\n}\n\nreturn {\n  json: {\n    reply_text: replyText,\n    action: 'send',\n    handoff: false,\n    stage: 'negotiating',\n    intent: 'negotiation_counter',\n    negotiation_status: input.negotiation_status,\n    source: input.source,\n    conversation_id: input.conversation_id,\n    sender_id: input.sender_id,\n    message_id: input.message_id,\n    negotiation_round: input.negotiation_round,\n    suggested_counter_price: input.suggested_counter_price,\n    best_offer: input.best_offer,\n    price_history: priceHistory\n  }\n};"
+      },
+      "id": "prepare-negotiate-reply",
+      "name": "Prepare Negotiation Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 500]
+    },
+    {
+      "parameters": {},
+      "id": "merge-negotiate-outputs",
+      "name": "Merge Outputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1900, 400]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "tableId": "conversations",
+        "filterType": "string",
+        "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+        "dataToSend": "definedBelow",
+        "fieldsToSend": {
+          "values": [
+            { "name": "conversation_id", "value": "={{ $json.conversation_id }}" },
+            { "name": "sender_id", "value": "={{ $json.sender_id }}" },
+            { "name": "source", "value": "={{ $json.source }}" },
+            { "name": "stage", "value": "={{ $json.stage }}" },
+            { "name": "intent", "value": "={{ $json.intent }}" },
+            { "name": "last_message_id", "value": "={{ $json.message_id }}" },
+            { "name": "last_reply_at", "value": "={{ new Date().toISOString() }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-conversation-state",
+      "name": "Save Conversation",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2120, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "tableId": "alibaba_negotiations",
+        "filterType": "string",
+        "filterString": "conversation_id=eq.{{ $json.conversation_id }}",
+        "dataToSend": "definedBelow",
+        "fieldsToSend": {
+          "values": [
+            { "name": "conversation_id", "value": "={{ $json.conversation_id }}" },
+            { "name": "seller_id", "value": "={{ $json.sender_id }}" },
+            { "name": "negotiation_status", "value": "={{ $json.negotiation_status }}" },
+            { "name": "negotiation_round", "value": "={{ $json.negotiation_round }}" },
+            { "name": "current_offer", "value": "={{ $json.best_offer || $json.suggested_counter_price }}" },
+            { "name": "best_offer", "value": "={{ $json.best_offer }}" },
+            { "name": "price_history", "value": "={{ JSON.stringify($json.price_history) }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save-negotiation-state",
+      "name": "Save Negotiation",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2120, 500],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "message_logs",
+        "dataToSend": "definedBelow",
+        "fieldsToSend": {
+          "values": [
+            { "name": "conversation_id", "value": "={{ $json.conversation_id }}" },
+            { "name": "message_id", "value": "={{ $json.message_id }}" },
+            { "name": "direction", "value": "outbound" },
+            { "name": "source", "value": "={{ $json.source }}" },
+            { "name": "content", "value": "={{ $json.reply_text }}" },
+            { "name": "stage", "value": "={{ $json.stage }}" },
+            { "name": "intent", "value": "={{ $json.intent }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-message",
+      "name": "Log Reply",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2340, 400],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "output",
+              "name": "output",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "return-negotiate-output",
+      "name": "Return Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2560, 400]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Conversation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load Negotiation State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Conversation": {
+      "main": [
+        [
+          {
+            "node": "Merge State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Negotiation State": {
+      "main": [
+        [
+          {
+            "node": "Merge State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge State": {
+      "main": [
+        [
+          {
+            "node": "Determine Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Strategy": {
+      "main": [
+        [
+          {
+            "node": "Route Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Strategy": {
+      "main": [
+        [
+          {
+            "node": "Prepare Accept",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Negotiation Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Accept": {
+      "main": [
+        [
+          {
+            "node": "Merge Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Handoff": {
+      "main": [
+        [
+          {
+            "node": "Merge Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Negotiation Reply": {
+      "main": [
+        [
+          {
+            "node": "Prepare Negotiation Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Negotiation Reply": {
+      "main": [
+        [
+          {
+            "node": "Merge Outputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Outputs": {
+      "main": [
+        [
+          {
+            "node": "Save Conversation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Negotiation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Conversation": {
+      "main": [
+        [
+          {
+            "node": "Log Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Negotiation": {
+      "main": [
+        [
+          {
+            "node": "Log Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Reply": {
+      "main": [
+        [
+          {
+            "node": "Return Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "alibaba"
+    },
+    {
+      "name": "negotiation"
+    },
+    {
+      "name": "brain"
+    }
+  ],
+  "triggerCount": 0,
+  "pinData": {}
+}

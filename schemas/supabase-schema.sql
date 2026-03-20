@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS conversations (
     conversation_id TEXT UNIQUE NOT NULL,
     sender_id TEXT NOT NULL,
     sender_name TEXT,
-    source TEXT NOT NULL CHECK (source IN ('meta', 'tiktok', 'gmail')),
+    source TEXT NOT NULL CHECK (source IN ('meta', 'tiktok', 'gmail', 'alibaba')),
     platform TEXT,
-    stage TEXT DEFAULT 'new' CHECK (stage IN ('new', 'qualified', 'booking', 'closed')),
+    stage TEXT DEFAULT 'new' CHECK (stage IN ('new', 'qualified', 'booking', 'closed', 'negotiating', 'offer_sent', 'counter_offer', 'agreed', 'order_placed')),
     intent TEXT,
     message_count INTEGER DEFAULT 0,
     last_message_id TEXT,
@@ -108,6 +108,58 @@ CREATE INDEX IF NOT EXISTS idx_handoff_queue_status ON handoff_queue(status);
 CREATE INDEX IF NOT EXISTS idx_handoff_queue_priority ON handoff_queue(priority);
 
 -- ============================================
+-- ALIBABA_NEGOTIATIONS TABLE
+-- Tracks negotiation state with Alibaba sellers
+-- ============================================
+CREATE TABLE IF NOT EXISTS alibaba_negotiations (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(conversation_id),
+    seller_id TEXT NOT NULL,
+    seller_name TEXT,
+    seller_store_url TEXT,
+    product_name TEXT,
+    product_url TEXT,
+    initial_price DECIMAL(12,2),
+    initial_currency TEXT DEFAULT 'USD',
+    target_price DECIMAL(12,2),
+    current_offer DECIMAL(12,2),
+    best_offer DECIMAL(12,2),
+    quantity INTEGER,
+    moq INTEGER,
+    unit TEXT DEFAULT 'piece',
+    shipping_method TEXT,
+    shipping_cost DECIMAL(12,2),
+    incoterm TEXT,
+    payment_terms TEXT,
+    lead_time_days INTEGER,
+    sample_requested BOOLEAN DEFAULT FALSE,
+    sample_cost DECIMAL(12,2),
+    negotiation_round INTEGER DEFAULT 0,
+    max_rounds INTEGER DEFAULT 5,
+    negotiation_status TEXT DEFAULT 'initial_contact' CHECK (
+        negotiation_status IN (
+            'initial_contact', 'price_inquiry', 'first_offer',
+            'counter_offer', 'negotiating', 'final_offer',
+            'agreed', 'sample_phase', 'order_placed', 'stalled', 'abandoned'
+        )
+    ),
+    strategy TEXT DEFAULT 'standard',
+    notes JSONB DEFAULT '[]'::jsonb,
+    price_history JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_alibaba_neg_conversation_id ON alibaba_negotiations(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_alibaba_neg_seller_id ON alibaba_negotiations(seller_id);
+CREATE INDEX IF NOT EXISTS idx_alibaba_neg_status ON alibaba_negotiations(negotiation_status);
+
+CREATE TRIGGER update_alibaba_negotiations_updated_at
+    BEFORE UPDATE ON alibaba_negotiations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
 -- UPDATED_AT TRIGGER
 -- Automatically update updated_at timestamp
 -- ============================================
@@ -132,6 +184,7 @@ CREATE TRIGGER update_conversations_updated_at
 -- ALTER TABLE message_logs ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE booking_logs ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE handoff_queue ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE alibaba_negotiations ENABLE ROW LEVEL SECURITY;
 
 -- ============================================
 -- VIEWS FOR ANALYTICS
@@ -178,3 +231,20 @@ ORDER BY
         WHEN 'low' THEN 4
     END,
     h.created_at;
+
+-- Alibaba negotiation overview
+CREATE OR REPLACE VIEW v_alibaba_negotiations AS
+SELECT
+    an.*,
+    c.sender_name,
+    c.message_count,
+    c.last_reply_at,
+    CASE
+        WHEN an.initial_price > 0 AND an.best_offer > 0
+        THEN ROUND(((an.initial_price - an.best_offer) / an.initial_price * 100)::numeric, 1)
+        ELSE 0
+    END as discount_pct
+FROM alibaba_negotiations an
+JOIN conversations c ON an.conversation_id = c.conversation_id
+WHERE an.negotiation_status NOT IN ('abandoned')
+ORDER BY an.updated_at DESC;

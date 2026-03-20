@@ -1,0 +1,227 @@
+{
+  "name": "WF-INGEST-ALIBABA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "alibaba-ingest",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "alibaba-webhook",
+      "name": "Alibaba Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "alibaba-ingest"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse and normalize Alibaba message payload\n// Alibaba Trade Manager / messaging API format\nconst body = $input.item.json.body || $input.item.json;\n\n// Support multiple payload formats:\n// 1. Alibaba Trade Manager webhook\n// 2. Manual forwarding (email/scraper)\n// 3. API integration\n\nlet normalized;\n\nif (body.data && body.data.type === 'trade_message') {\n  // Alibaba Trade Manager format\n  const msg = body.data;\n  normalized = {\n    source: 'alibaba',\n    platform: 'trade_manager',\n    conversation_id: `alibaba_${msg.sender_id}_${msg.thread_id || msg.inquiry_id}`,\n    sender_id: msg.sender_id,\n    sender_name: msg.sender_company || msg.sender_name || 'Unknown Seller',\n    message: msg.content || msg.text,\n    message_id: msg.message_id || `ali_${Date.now()}`,\n    timestamp: msg.timestamp || new Date().toISOString(),\n    metadata: {\n      thread_id: msg.thread_id,\n      inquiry_id: msg.inquiry_id,\n      product_id: msg.product_id,\n      product_name: msg.product_name,\n      product_url: msg.product_url,\n      seller_store_url: msg.store_url,\n      seller_rating: msg.seller_rating,\n      seller_years: msg.years_on_alibaba,\n      seller_response_rate: msg.response_rate,\n      price_mentioned: msg.price,\n      moq: msg.moq,\n      currency: msg.currency || 'USD'\n    }\n  };\n} else if (body.from_email || body.forwarded) {\n  // Email-forwarded Alibaba message\n  const emailBody = body.body || body.content || body.text || '';\n  const sellerMatch = emailBody.match(/from[:\\s]+([^\\n]+)/i);\n  const priceMatch = emailBody.match(/(?:price|prix|\\$|USD|EUR)\\s*[:\\s]*([\\d.,]+)/i);\n  const moqMatch = emailBody.match(/(?:MOQ|minimum|min\\.?\\s*order)\\s*[:\\s]*(\\d+)/i);\n\n  normalized = {\n    source: 'alibaba',\n    platform: 'email_forward',\n    conversation_id: `alibaba_email_${body.from_email || body.sender || Date.now()}`,\n    sender_id: body.from_email || body.sender || 'unknown',\n    sender_name: sellerMatch ? sellerMatch[1].trim() : (body.from_name || body.sender_name || 'Unknown Seller'),\n    message: emailBody,\n    message_id: body.message_id || `ali_email_${Date.now()}`,\n    timestamp: body.date || new Date().toISOString(),\n    metadata: {\n      original_subject: body.subject,\n      price_detected: priceMatch ? parseFloat(priceMatch[1].replace(',', '')) : null,\n      moq_detected: moqMatch ? parseInt(moqMatch[1]) : null,\n      forwarded_from: body.from_email\n    }\n  };\n} else {\n  // Generic / manual format\n  normalized = {\n    source: 'alibaba',\n    platform: body.platform || 'manual',\n    conversation_id: body.conversation_id || `alibaba_manual_${body.seller_id || Date.now()}`,\n    sender_id: body.seller_id || body.sender_id || 'unknown',\n    sender_name: body.seller_name || body.sender_name || 'Unknown Seller',\n    message: body.message || body.content || body.text || '',\n    message_id: body.message_id || `ali_manual_${Date.now()}`,\n    timestamp: body.timestamp || new Date().toISOString(),\n    metadata: {\n      product_name: body.product_name,\n      product_url: body.product_url,\n      seller_store_url: body.store_url,\n      price: body.price ? parseFloat(body.price) : null,\n      currency: body.currency || 'USD',\n      moq: body.moq ? parseInt(body.moq) : null,\n      quantity_needed: body.quantity ? parseInt(body.quantity) : null\n    }\n  };\n}\n\nreturn { json: normalized };"
+      },
+      "id": "normalize-alibaba",
+      "name": "Normalize Alibaba Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-message",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validate-message",
+      "name": "Validate Message",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract negotiation-relevant data from the message\nconst input = $input.item.json;\nconst message = (input.message || '').toLowerCase();\nconst meta = input.metadata || {};\n\n// Detect prices in message\nconst pricePatterns = [\n  /(?:USD|\\$)\\s*([\\d.,]+)/gi,\n  /([\\d.,]+)\\s*(?:USD|\\$|dollars?)/gi,\n  /(?:EUR|\\u20ac)\\s*([\\d.,]+)/gi,\n  /([\\d.,]+)\\s*(?:EUR|\\u20ac|euros?)/gi,\n  /(?:prix|price|cout|cost)\\s*[:\\s]*([\\d.,]+)/gi,\n  /(?:unit price|prix unitaire)\\s*[:\\s]*(?:USD|\\$|EUR|\\u20ac)?\\s*([\\d.,]+)/gi\n];\n\nlet detectedPrices = [];\nfor (const pattern of pricePatterns) {\n  let match;\n  while ((match = pattern.exec(input.message)) !== null) {\n    const price = parseFloat(match[1].replace(',', ''));\n    if (price > 0 && price < 1000000) {\n      detectedPrices.push(price);\n    }\n  }\n}\n\n// Detect quantities\nconst qtyPatterns = [\n  /(?:qty|quantity|quantite|qte)\\s*[:\\s]*(\\d+)/gi,\n  /(\\d+)\\s*(?:pieces?|pcs|units?|unites?)/gi,\n  /(?:MOQ|minimum)\\s*[:\\s]*(\\d+)/gi\n];\n\nlet detectedQuantities = [];\nfor (const pattern of qtyPatterns) {\n  let match;\n  while ((match = pattern.exec(input.message)) !== null) {\n    detectedQuantities.push(parseInt(match[1]));\n  }\n}\n\n// Detect shipping terms\nconst shippingTerms = ['FOB', 'CIF', 'EXW', 'DDP', 'DAP', 'FCA'];\nconst detectedIncoterm = shippingTerms.find(term => message.includes(term.toLowerCase()));\n\n// Detect if seller is making an offer or responding to inquiry\nconst isOffer = /(?:offer|offre|best price|meilleur prix|special price|prix special|discount|remise|we can do|nous pouvons)/i.test(input.message);\nconst isCounterOffer = /(?:final price|dernier prix|cannot go lower|lowest|plus bas|last offer|derniere offre)/i.test(input.message);\nconst isAcceptance = /(?:deal|accord|accept|agreed|d'accord|ok pour|we agree)/i.test(input.message);\nconst isInquiryResponse = /(?:thank.*inquiry|merci.*demande|regarding your|suite a votre|in response)/i.test(input.message);\n\nreturn {\n  json: {\n    ...input,\n    negotiation_data: {\n      detected_prices: detectedPrices,\n      detected_quantities: detectedQuantities,\n      detected_incoterm: detectedIncoterm || null,\n      is_offer: isOffer,\n      is_counter_offer: isCounterOffer,\n      is_acceptance: isAcceptance,\n      is_inquiry_response: isInquiryResponse,\n      price_from_meta: meta.price_detected || meta.price || null,\n      moq_from_meta: meta.moq_detected || meta.moq || null\n    }\n  }\n};"
+      },
+      "id": "extract-negotiation-data",
+      "name": "Extract Negotiation Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "WF-ALIBABA-NEGOTIATE",
+        "options": {}
+      },
+      "id": "call-negotiate",
+      "name": "Call Negotiation Brain",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-reply",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "none",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-action",
+      "name": "Has Action?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1360, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "WF-ACTIONS-SEND",
+        "options": {}
+      },
+      "id": "send-reply",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1580, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', action: $json.action, conversation_id: $json.conversation_id }) }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1800, 300]
+    }
+  ],
+  "connections": {
+    "Alibaba Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Alibaba Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Alibaba Message": {
+      "main": [
+        [
+          {
+            "node": "Validate Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Message": {
+      "main": [
+        [
+          {
+            "node": "Extract Negotiation Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Negotiation Data": {
+      "main": [
+        [
+          {
+            "node": "Call Negotiation Brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Negotiation Brain": {
+      "main": [
+        [
+          {
+            "node": "Has Action?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Action?": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "alibaba"
+    },
+    {
+      "name": "ingest"
+    }
+  ],
+  "triggerCount": 1,
+  "pinData": {}
+}
