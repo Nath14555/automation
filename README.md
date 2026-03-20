@@ -147,6 +147,41 @@ atteint) atteint)
 3. Configurer les webhooks URLs
 4. Activer les workflows
 
+### Bridge Alibaba (dossier `bridge/`)
+
+3 methodes pour connecter Alibaba au webhook :
+
+#### Methode 1 : Tampermonkey (recommande pour debuter)
+
+1. Installer [Tampermonkey](https://www.tampermonkey.net/) dans Chrome/Firefox
+2. Creer un nouveau script et coller le contenu de `bridge/alibaba-tampermonkey.user.js`
+3. Ouvrir la messagerie Alibaba dans le navigateur
+4. Configurer l'URL webhook dans le panneau (coin bas-droit)
+
+#### Methode 2 : Puppeteer (autonome, tourne en arriere-plan)
+
+```bash
+cd bridge
+cp .env.example .env
+nano .env                    # configurer N8N_WEBHOOK_URL + credentials
+npm install
+HEADLESS=false npm start     # premiere fois: connexion manuelle
+npm start                    # ensuite: mode headless avec cookies
+```
+
+#### Methode 3 : Email (fallback)
+
+1. Activer les notifications email dans les parametres Alibaba
+2. Configurer les acces IMAP dans `.env`
+
+```bash
+cd bridge
+cp .env.example .env
+nano .env                    # configurer IMAP_* + N8N_WEBHOOK_URL
+npm install
+npm run email-bridge
+```
+
 ## Variables d'environnement
 
 - `SUPABASE_URL` - URL Supabase pour le stockage

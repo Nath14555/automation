@@ -1,0 +1,15 @@
+{
+  "name": "alibaba-bridge",
+  "version": "1.0.0",
+  "description": "Bridge entre Alibaba messaging et le webhook n8n",
+  "private": true,
+  "scripts": {
+    "start": "node alibaba-puppeteer-bridge.js",
+    "email-bridge": "node alibaba-email-bridge.js"
+  },
+  "dependencies": {
+    "puppeteer": "^22.0.0",
+    "imap": "^0.8.19",
+    "mailparser": "^3.7.0"
+  }
+}
