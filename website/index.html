@@ -3,421 +3,299 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Solutions d'intelligence artificielle pour le marketing, les ressources humaines, le service client et plus encore. Automatisez votre entreprise avec l'IA." />
-  <title>NovaAI — Services d'Intelligence Artificielle pour Entreprises</title>
+  <meta name="description" content="NovaAI — services d'intelligence artificielle créatifs pour le marketing, les RH et bien plus." />
+  <title>NovaAI — l'IA qui fait briller votre business ✨</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Caveat:wght@500;700&family=Inter:wght@400;500;600;700&family=Shadows+Into+Light&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
-  <header class="site-header" id="site-header">
+  <!-- Washi tape decorations -->
+  <div class="tape tape-top-left" aria-hidden="true"></div>
+  <div class="tape tape-top-right" aria-hidden="true"></div>
+
+  <header class="site-header">
     <div class="container nav-container">
       <a href="#accueil" class="brand">
-        <span class="brand-mark">N</span>
+        <span class="brand-mark">★</span>
         <span class="brand-name">NovaAI</span>
       </a>
-      <nav class="nav" aria-label="Navigation principale">
-        <a href="#services">Services</a>
-        <a href="#fonctionnalites">Fonctionnalités</a>
-        <a href="#tarifs">Tarifs</a>
-        <a href="#temoignages">Témoignages</a>
-        <a href="#contact">Contact</a>
+      <nav class="nav" aria-label="Navigation">
+        <a href="#services">services</a>
+        <a href="#about">about</a>
+        <a href="#works">works</a>
+        <a href="#contact">contact</a>
       </nav>
-      <div class="nav-cta">
-        <a href="#contact" class="btn btn-primary">Démarrer</a>
-        <button class="nav-toggle" aria-label="Menu" aria-expanded="false" id="nav-toggle">
-          <span></span><span></span><span></span>
-        </button>
-      </div>
+      <a href="#contact" class="btn-pill">let's talk →</a>
     </div>
   </header>
 
   <main>
-    <!-- HERO -->
+    <!-- ======================= HERO ======================= -->
     <section class="hero" id="accueil">
-      <div class="hero-bg"></div>
-      <div class="container hero-grid">
-        <div class="hero-copy">
-          <span class="eyebrow">Plateforme IA tout-en-un</span>
-          <h1>L'Intelligence Artificielle au service de <span class="grad">votre entreprise</span>.</h1>
-          <p class="lead">Automatisez votre marketing, recrutez plus vite, servez mieux vos clients. NovaAI réunit les meilleurs agents d'IA dans une seule plateforme, pensée pour les équipes qui veulent aller plus loin.</p>
-          <div class="hero-cta">
-            <a href="#contact" class="btn btn-primary btn-lg">Essai gratuit 14 jours</a>
-            <a href="#services" class="btn btn-ghost btn-lg">Voir les services →</a>
+      <div class="container">
+        <div class="hero-card">
+          <p class="handwriting hero-greet">Hi, since you're new here…</p>
+          <p class="handwriting hero-greet-2">let me be ya tour guide ✎</p>
+
+          <h1 class="hero-title">
+            <span class="hero-this">This is</span>
+            <span class="bubble bubble-1">NOVA</span>
+            <span class="bubble bubble-2">AI</span>
+          </h1>
+
+          <div class="hero-photo">
+            <div class="hero-photo-inner">✨</div>
+            <span class="sticker sticker-star">★</span>
+            <span class="sticker sticker-heart">♥</span>
           </div>
-          <ul class="hero-meta">
-            <li><strong>+2 500</strong> entreprises</li>
-            <li><strong>99,9 %</strong> disponibilité</li>
-            <li><strong>GDPR</strong> conforme</li>
-          </ul>
-        </div>
-        <div class="hero-visual" aria-hidden="true">
-          <div class="orb orb-1"></div>
-          <div class="orb orb-2"></div>
-          <div class="card float-card card-marketing">
-            <div class="card-icon">📈</div>
-            <div class="card-title">Campagne générée</div>
-            <div class="card-bar"><span style="width:82%"></span></div>
-            <div class="card-sub">ROI prédictif : +32 %</div>
-          </div>
-          <div class="card float-card card-hr">
-            <div class="card-icon">👥</div>
-            <div class="card-title">12 candidats présélectionnés</div>
-            <div class="card-sub">Score moyen : 87 / 100</div>
-          </div>
-          <div class="card float-card card-chat">
-            <div class="card-icon">💬</div>
-            <div class="card-title">Assistant IA</div>
-            <div class="chat-bubble">« Bonjour 👋 comment puis-je vous aider aujourd'hui ? »</div>
+
+          <div class="hero-bottom">
+            <p class="hero-role">AI Agency · Marketing · RH · Ops</p>
+            <p class="hero-by">By your favorite AI team</p>
           </div>
         </div>
+
+        <p class="hero-sub">
+          On met l'<em>intelligence artificielle</em> au service de votre business — avec du goût, de la créativité et beaucoup de bubble gum 🍬
+        </p>
       </div>
     </section>
 
-    <!-- TRUST BAR -->
-    <section class="trust">
-      <div class="container trust-inner">
-        <span class="trust-label">Ils nous font confiance</span>
-        <div class="logos">
-          <span>ACME</span><span>Lumen</span><span>Orbit</span><span>Nimbus</span><span>Vertex</span><span>Kairos</span>
-        </div>
+    <!-- ======================= ABOUT / STORY ======================= -->
+    <section class="section" id="about">
+      <div class="container story-grid">
+        <article class="paper-card story-text">
+          <p class="caveat story-prelude">a lil' story…</p>
+          <p>
+            Tiny, curious, and low-key destined pour le monde digital. NovaAI a grandi dans un petit studio parisien, avec trois ordinateurs, beaucoup de café, et une conviction&nbsp;: <strong>l'IA doit être créative, pas juste efficace</strong>.
+          </p>
+          <p class="story-after">
+            Après avoir vu des marques entières transformées grâce à nos agents intelligents, on s'est dit&nbsp;: <strong>les gens adorent ce qui est beau + utile</strong>. C'est là que tout a cliqué. ✨
+          </p>
+
+          <div class="story-dots">
+            <span class="dot dot-pink"></span>
+            <span class="dot dot-black"></span>
+            <span class="dot dot-beige"></span>
+          </div>
+        </article>
+
+        <article class="paper-card story-collage">
+          <span class="photo-tag">avant → après</span>
+          <div class="polaroid polaroid-1"><span>📊</span></div>
+          <div class="polaroid polaroid-2"><span>💡</span></div>
+          <svg class="squiggle" viewBox="0 0 200 40" aria-hidden="true">
+            <path d="M2,20 Q25,2 50,20 T100,20 T150,20 T198,20" fill="none" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </article>
       </div>
     </section>
 
-    <!-- SERVICES -->
+    <!-- ======================= SERVICES ======================= -->
     <section class="section" id="services">
       <div class="container">
-        <div class="section-head">
-          <span class="eyebrow">Nos services IA</span>
-          <h2>Une IA spécialisée pour chaque métier</h2>
-          <p>Des agents intelligents pré-entraînés pour accélérer chaque service de votre entreprise.</p>
-        </div>
+        <h2 class="section-title">
+          it's not just AI, <span class="bubble-sm">it's vibing</span> with your brand.
+        </h2>
 
         <div class="services-grid">
-          <article class="service-card">
-            <div class="service-icon" style="--tone:#7c5cff">📣</div>
+          <article class="paper-card service">
+            <span class="service-num">01</span>
             <h3>Marketing IA</h3>
-            <p>Génération de contenu, campagnes multi-canal, segmentation et prédiction du ROI.</p>
-            <ul class="service-list">
-              <li>Rédaction d'annonces & e-mails</li>
-              <li>SEO & blog automatisé</li>
-              <li>Analyse de la concurrence</li>
-              <li>A/B testing piloté par IA</li>
+            <p>Campagnes, contenus, SEO, publicités — le tout piloté par des agents IA qui comprennent votre marque.</p>
+            <ul class="tag-list">
+              <li>copywriting</li><li>social media</li><li>SEO</li><li>ads</li>
             </ul>
-            <a href="#contact" class="service-link">En savoir plus →</a>
           </article>
 
-          <article class="service-card">
-            <div class="service-icon" style="--tone:#00c4a7">👥</div>
+          <article class="paper-card service service-pink">
+            <span class="service-num">02</span>
             <h3>Ressources Humaines IA</h3>
-            <p>Tri de CV, entretiens vidéo analysés, onboarding personnalisé et suivi de l'engagement.</p>
-            <ul class="service-list">
-              <li>Matching candidat / poste</li>
-              <li>Rédaction d'offres d'emploi</li>
-              <li>Analyse de sentiment équipe</li>
-              <li>Chatbot RH interne</li>
+            <p>Recrutement, onboarding, engagement — on automatise l'admin pour que vous gardiez le côté humain.</p>
+            <ul class="tag-list">
+              <li>tri de CV</li><li>entretiens</li><li>offres d'emploi</li><li>chatbot RH</li>
             </ul>
-            <a href="#contact" class="service-link">En savoir plus →</a>
           </article>
 
-          <article class="service-card">
-            <div class="service-icon" style="--tone:#ff7a59">💬</div>
+          <article class="paper-card service">
+            <span class="service-num">03</span>
             <h3>Service Client IA</h3>
-            <p>Assistants conversationnels 24/7 sur tous les canaux, avec handoff intelligent.</p>
-            <ul class="service-list">
-              <li>Chatbot multi-langues</li>
-              <li>Intégration WhatsApp, Meta, e-mail</li>
-              <li>Tickets auto-qualifiés</li>
-              <li>Base de connaissances vivante</li>
+            <p>Chatbots multilingues, tickets auto-qualifiés, base de connaissance vivante. 24/7, zéro burn-out.</p>
+            <ul class="tag-list">
+              <li>chatbot</li><li>WhatsApp</li><li>e-mail</li><li>handoff humain</li>
             </ul>
-            <a href="#contact" class="service-link">En savoir plus →</a>
           </article>
 
-          <article class="service-card">
-            <div class="service-icon" style="--tone:#3b82f6">💼</div>
+          <article class="paper-card service service-pink">
+            <span class="service-num">04</span>
             <h3>Ventes IA</h3>
-            <p>Scoring des leads, relances automatisées et recommandations produits en temps réel.</p>
-            <ul class="service-list">
-              <li>Lead scoring prédictif</li>
-              <li>Séquences e-mails personnalisées</li>
-              <li>Résumé d'appels & CRM auto</li>
-              <li>Prévisions de vente</li>
+            <p>Scoring de leads, relances intelligentes, recommandations produits. Votre équipe se concentre sur ce qui matter.</p>
+            <ul class="tag-list">
+              <li>lead scoring</li><li>CRM auto</li><li>forecast</li><li>follow-up</li>
             </ul>
-            <a href="#contact" class="service-link">En savoir plus →</a>
           </article>
 
-          <article class="service-card">
-            <div class="service-icon" style="--tone:#f59e0b">📊</div>
-            <h3>Finance & Analytics IA</h3>
-            <p>Tableaux de bord intelligents, détection d'anomalies et prévisions budgétaires.</p>
-            <ul class="service-list">
-              <li>Reporting automatisé</li>
-              <li>Détection de fraude</li>
-              <li>Prévisions de trésorerie</li>
-              <li>Classification de factures</li>
+          <article class="paper-card service">
+            <span class="service-num">05</span>
+            <h3>Finance & Data IA</h3>
+            <p>Reporting auto, détection d'anomalies, prévisions budgétaires. Enfin des chiffres qui parlent.</p>
+            <ul class="tag-list">
+              <li>dashboards</li><li>forecast</li><li>factures</li><li>fraude</li>
             </ul>
-            <a href="#contact" class="service-link">En savoir plus →</a>
           </article>
 
-          <article class="service-card">
-            <div class="service-icon" style="--tone:#ec4899">⚙️</div>
+          <article class="paper-card service service-pink">
+            <span class="service-num">06</span>
             <h3>Opérations IA</h3>
-            <p>Automatisation des workflows, orchestration des outils et gestion intelligente des tâches.</p>
-            <ul class="service-list">
-              <li>Workflows n8n / Zapier IA</li>
-              <li>Extraction de documents</li>
-              <li>RPA augmenté</li>
-              <li>Assistant de projet</li>
+            <p>Workflows n8n, extraction de documents, RPA augmenté. On connecte tous vos outils, sans prise de tête.</p>
+            <ul class="tag-list">
+              <li>n8n</li><li>Zapier</li><li>automation</li><li>RPA</li>
             </ul>
-            <a href="#contact" class="service-link">En savoir plus →</a>
           </article>
         </div>
       </div>
     </section>
 
-    <!-- FEATURES -->
-    <section class="section section-dark" id="fonctionnalites">
-      <div class="container">
-        <div class="section-head">
-          <span class="eyebrow">Pourquoi NovaAI</span>
-          <h2>Une plateforme pensée pour passer à l'échelle</h2>
+    <!-- ======================= SKILLS & WORKS ======================= -->
+    <section class="section" id="works">
+      <div class="container works-grid">
+        <div class="paper-card works-left">
+          <h2 class="bubble-title">skills<br/>&amp; <em>works</em></h2>
+          <p class="caveat works-caption">ce qu'on aime faire&nbsp;: ↓</p>
+
+          <div class="skills-cloud">
+            <span>ChatGPT</span>
+            <span>Claude</span>
+            <span>n8n</span>
+            <span>Make</span>
+            <span>Zapier</span>
+            <span>Notion AI</span>
+            <span>HubSpot</span>
+            <span>Midjourney</span>
+            <span>ElevenLabs</span>
+            <span>Airtable</span>
+            <span>Slack</span>
+            <span>Supabase</span>
+          </div>
         </div>
 
-        <div class="features-grid">
-          <div class="feature">
-            <div class="feature-icon">🔒</div>
-            <h4>Sécurité & conformité</h4>
-            <p>Chiffrement bout-en-bout, hébergement européen, conformité RGPD et ISO 27001.</p>
-          </div>
-          <div class="feature">
-            <div class="feature-icon">🧩</div>
-            <h4>+120 intégrations</h4>
-            <p>Connectez vos outils préférés : HubSpot, Salesforce, Slack, Notion, Google Workspace…</p>
-          </div>
-          <div class="feature">
-            <div class="feature-icon">⚡</div>
-            <h4>Déploiement en minutes</h4>
-            <p>Pas besoin d'équipe technique. Lancez votre premier agent en moins de 10 minutes.</p>
-          </div>
-          <div class="feature">
-            <div class="feature-icon">🌍</div>
-            <h4>95 langues</h4>
-            <p>Vos agents IA parlent aussi bien français qu'anglais, espagnol, arabe ou mandarin.</p>
-          </div>
-          <div class="feature">
-            <div class="feature-icon">🧠</div>
-            <h4>Modèles de pointe</h4>
-            <p>Propulsé par les meilleurs LLM (Claude, GPT, Llama) avec sélection intelligente.</p>
-          </div>
-          <div class="feature">
-            <div class="feature-icon">📈</div>
-            <h4>ROI mesurable</h4>
-            <p>Tableau de bord dédié pour suivre les gains de temps et d'argent générés par l'IA.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- HOW IT WORKS -->
-    <section class="section" id="fonctionnement">
-      <div class="container">
-        <div class="section-head">
-          <span class="eyebrow">Comment ça marche</span>
-          <h2>Trois étapes pour mettre l'IA au travail</h2>
-        </div>
-        <div class="steps">
-          <div class="step">
-            <div class="step-num">01</div>
-            <h4>Connectez vos outils</h4>
-            <p>CRM, e-mail, réseaux sociaux, ATS… En quelques clics, NovaAI se synchronise.</p>
-          </div>
-          <div class="step">
-            <div class="step-num">02</div>
-            <h4>Choisissez vos agents</h4>
-            <p>Activez les agents Marketing, RH, Ventes ou Support selon vos besoins.</p>
-          </div>
-          <div class="step">
-            <div class="step-num">03</div>
-            <h4>Automatisez & mesurez</h4>
-            <p>Laissez l'IA travailler et suivez vos gains en temps réel sur votre dashboard.</p>
-          </div>
+        <div class="paper-card works-right">
+          <p class="caveat">how we help, in 3 steps&nbsp;:</p>
+          <ol class="steps-list">
+            <li>
+              <strong>01 · on écoute</strong>
+              <p>Un call gratuit pour comprendre vos besoins et vos outils actuels.</p>
+            </li>
+            <li>
+              <strong>02 · on bricole</strong>
+              <p>On construit vos agents IA sur mesure, testés et approuvés avant le lancement.</p>
+            </li>
+            <li>
+              <strong>03 · on mesure</strong>
+              <p>Dashboard personnalisé pour voir les gains de temps et d'argent, en live.</p>
+            </li>
+          </ol>
         </div>
       </div>
     </section>
 
-    <!-- PRICING -->
-    <section class="section section-muted" id="tarifs">
+    <!-- ======================= TESTIMONIALS ======================= -->
+    <section class="section" id="reviews">
       <div class="container">
-        <div class="section-head">
-          <span class="eyebrow">Tarifs</span>
-          <h2>Des formules simples, sans surprise</h2>
-          <p>Changez de plan ou annulez à tout moment.</p>
-        </div>
+        <h2 class="section-title">
+          <span class="bubble-sm">nice words</span> from nice people ♥
+        </h2>
 
-        <div class="pricing-grid">
-          <div class="price-card">
-            <h3>Starter</h3>
-            <p class="price-desc">Pour les freelances et TPE qui découvrent l'IA.</p>
-            <div class="price"><span class="amount">29 €</span><span class="period">/mois</span></div>
-            <ul class="price-list">
-              <li>1 agent IA au choix</li>
-              <li>5 000 requêtes / mois</li>
-              <li>Intégrations essentielles</li>
-              <li>Support par e-mail</li>
-            </ul>
-            <a href="#contact" class="btn btn-outline btn-block">Commencer</a>
-          </div>
-
-          <div class="price-card price-featured">
-            <span class="badge">Populaire</span>
-            <h3>Business</h3>
-            <p class="price-desc">Pour les PME prêtes à automatiser plusieurs services.</p>
-            <div class="price"><span class="amount">99 €</span><span class="period">/mois</span></div>
-            <ul class="price-list">
-              <li>5 agents IA</li>
-              <li>50 000 requêtes / mois</li>
-              <li>Toutes les intégrations</li>
-              <li>Support prioritaire 24/5</li>
-              <li>Tableaux de bord avancés</li>
-            </ul>
-            <a href="#contact" class="btn btn-primary btn-block">Choisir Business</a>
-          </div>
-
-          <div class="price-card">
-            <h3>Enterprise</h3>
-            <p class="price-desc">Pour les grandes équipes avec des besoins spécifiques.</p>
-            <div class="price"><span class="amount">Sur devis</span></div>
-            <ul class="price-list">
-              <li>Agents IA illimités</li>
-              <li>Requêtes sur mesure</li>
-              <li>SSO, audit, SLA 99,9 %</li>
-              <li>Customer Success dédié</li>
-              <li>Modèles privés</li>
-            </ul>
-            <a href="#contact" class="btn btn-outline btn-block">Nous contacter</a>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TESTIMONIALS -->
-    <section class="section" id="temoignages">
-      <div class="container">
-        <div class="section-head">
-          <span class="eyebrow">Témoignages</span>
-          <h2>Ce que nos clients disent</h2>
-        </div>
-        <div class="testimonials">
-          <figure class="quote">
-            <blockquote>« Grâce à NovaAI, notre équipe marketing produit 4× plus de contenu avec un ROI mesurable. Un vrai game-changer. »</blockquote>
-            <figcaption>
-              <strong>Amélie Dubois</strong><span>CMO, Lumen</span>
-            </figcaption>
+        <div class="quotes-grid">
+          <figure class="paper-card quote-card">
+            <blockquote>
+              « On produit 4× plus de contenu marketing, et le ROI est mesurable. <em>Game-changer total.</em> »
+            </blockquote>
+            <figcaption>— Amélie, CMO @ Lumen</figcaption>
           </figure>
-          <figure class="quote">
-            <blockquote>« On a divisé notre temps de recrutement par trois. L'IA fait le tri, nous on se concentre sur l'humain. »</blockquote>
-            <figcaption>
-              <strong>Karim Benali</strong><span>Head of People, Orbit</span>
-            </figcaption>
+          <figure class="paper-card quote-card quote-pink">
+            <blockquote>
+              « Notre temps de recrutement divisé par 3. L'IA fait le tri, on se concentre sur l'humain. »
+            </blockquote>
+            <figcaption>— Karim, Head of People @ Orbit</figcaption>
           </figure>
-          <figure class="quote">
-            <blockquote>« Notre service client répond en 30 secondes, 24h/24. Les clients adorent, on ne reviendrait plus en arrière. »</blockquote>
-            <figcaption>
-              <strong>Sophie Laurent</strong><span>COO, Nimbus</span>
-            </figcaption>
+          <figure class="paper-card quote-card">
+            <blockquote>
+              « Le service client répond en 30 secondes, 24h/24. Les clients adorent. »
+            </blockquote>
+            <figcaption>— Sophie, COO @ Nimbus</figcaption>
           </figure>
         </div>
       </div>
     </section>
 
-    <!-- CTA + CONTACT -->
-    <section class="section cta-section" id="contact">
-      <div class="container cta-grid">
-        <div class="cta-copy">
-          <span class="eyebrow light">Parlons de votre projet</span>
-          <h2>Prêt·e à confier le travail répétitif à l'IA&nbsp;?</h2>
-          <p>Réservez une démo gratuite de 30 minutes. Nos experts vous montrent comment NovaAI peut transformer votre entreprise, étape par étape.</p>
-          <ul class="cta-list">
-            <li>✔ Audit gratuit de vos besoins</li>
-            <li>✔ Démo personnalisée</li>
-            <li>✔ Essai 14 jours sans engagement</li>
-          </ul>
+    <!-- ======================= CONTACT ======================= -->
+    <section class="section" id="contact">
+      <div class="container contact-wrap">
+        <div class="paper-card contact-card">
+          <p class="caveat">and that's…</p>
+          <h2 class="bubble-title">a wrap.</h2>
+          <p class="contact-intro">
+            Envie d'en discuter&nbsp;? Un petit mot, un café virtuel, et on voit ensemble ce qu'on peut faire.
+          </p>
+
+          <form id="contact-form" class="contact-form" novalidate>
+            <div class="row">
+              <div class="field">
+                <label for="name">votre nom</label>
+                <input id="name" name="name" type="text" placeholder="Nina Dupont" required />
+              </div>
+              <div class="field">
+                <label for="email">e-mail</label>
+                <input id="email" name="email" type="email" placeholder="nina@marque.com" required />
+              </div>
+            </div>
+            <div class="field">
+              <label for="service">ce qui vous intéresse</label>
+              <select id="service" name="service">
+                <option>Marketing IA</option>
+                <option>Ressources Humaines IA</option>
+                <option>Service Client IA</option>
+                <option>Ventes IA</option>
+                <option>Finance & Data IA</option>
+                <option>Opérations IA</option>
+                <option>Autre / on en parle</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="message">votre projet</label>
+              <textarea id="message" name="message" rows="4" placeholder="Dites-nous en plus…"></textarea>
+            </div>
+            <button type="submit" class="btn-pill btn-pill-big">envoyer ♥</button>
+            <div id="form-feedback" class="form-feedback" role="status" aria-live="polite"></div>
+          </form>
         </div>
-        <form class="contact-form" id="contact-form" novalidate>
-          <div class="field">
-            <label for="name">Nom complet</label>
-            <input id="name" name="name" type="text" required placeholder="Votre nom" />
+
+        <aside class="paper-card envelope-card">
+          <div class="envelope">
+            <p class="handwriting envelope-text">
+              « Thanks so much for taking the time to look through my portfolio.
+              I always appreciate new opportunities to learn and grow.
+              If you're interested in working together, I'd love to chat. »
+            </p>
+            <p class="handwriting envelope-sign">xoxo, the NovaAI team</p>
           </div>
-          <div class="field">
-            <label for="email">E-mail professionnel</label>
-            <input id="email" name="email" type="email" required placeholder="vous@entreprise.com" />
-          </div>
-          <div class="field">
-            <label for="company">Entreprise</label>
-            <input id="company" name="company" type="text" placeholder="Nom de votre entreprise" />
-          </div>
-          <div class="field">
-            <label for="service">Service qui vous intéresse</label>
-            <select id="service" name="service">
-              <option value="marketing">Marketing IA</option>
-              <option value="rh">Ressources Humaines IA</option>
-              <option value="support">Service Client IA</option>
-              <option value="ventes">Ventes IA</option>
-              <option value="finance">Finance & Analytics IA</option>
-              <option value="ops">Opérations IA</option>
-              <option value="autre">Autre / ne sais pas</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="message">Votre message</label>
-            <textarea id="message" name="message" rows="4" placeholder="Dites-nous en plus sur votre projet…"></textarea>
-          </div>
-          <button type="submit" class="btn btn-primary btn-block btn-lg">Envoyer ma demande</button>
-          <p class="form-note">Nous répondons en moins de 24 heures ouvrées.</p>
-          <div class="form-feedback" id="form-feedback" role="status" aria-live="polite"></div>
-        </form>
+          <div class="envelope-flap"></div>
+        </aside>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <div class="container footer-grid">
-      <div class="footer-brand">
-        <a href="#accueil" class="brand">
-          <span class="brand-mark">N</span>
-          <span class="brand-name">NovaAI</span>
-        </a>
-        <p>L'intelligence artificielle au service de votre croissance.</p>
+    <div class="container footer-inner">
+      <p>© <span id="year"></span> NovaAI — made with ♥, coffee &amp; a lot of pink.</p>
+      <div class="footer-links">
+        <a href="#">instagram</a>
+        <a href="#">linkedin</a>
+        <a href="#contact">contact</a>
       </div>
-      <div>
-        <h5>Produit</h5>
-        <ul>
-          <li><a href="#services">Services</a></li>
-          <li><a href="#fonctionnalites">Fonctionnalités</a></li>
-          <li><a href="#tarifs">Tarifs</a></li>
-        </ul>
-      </div>
-      <div>
-        <h5>Entreprise</h5>
-        <ul>
-          <li><a href="#temoignages">Témoignages</a></li>
-          <li><a href="#contact">Contact</a></li>
-          <li><a href="#">À propos</a></li>
-        </ul>
-      </div>
-      <div>
-        <h5>Légal</h5>
-        <ul>
-          <li><a href="#">Mentions légales</a></li>
-          <li><a href="#">Confidentialité</a></li>
-          <li><a href="#">CGU</a></li>
-        </ul>
-      </div>
-    </div>
-    <div class="container footer-bottom">
-      <span>© <span id="year"></span> NovaAI. Tous droits réservés.</span>
-      <span>Fait avec ❤ en Europe.</span>
     </div>
   </footer>
 
