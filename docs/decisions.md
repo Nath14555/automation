@@ -41,3 +41,14 @@ Format : ID · Date · Statut · Contexte · Décision · Conséquences.
   - Build legèrement plus strict ⇒ moins de bugs en runtime.
   - Toute contribution future doit passer ces gates.
   - Premier `npm install` requis avant que les hooks soient actifs (la commande `prepare` les configure).
+
+## ADR-0004 — Domaine `louna-co.com`
+
+- **Date** : 2026-05-07
+- **Statut** : Accepté
+- **Contexte** : Le BRIEF mentionnait `louna-co.ca` à titre d'exemple. Lou a confirmé que Louna&Co possède déjà `louna-co.com`.
+- **Décision** : Utiliser `louna-co.com` comme domaine principal. Sous-domaine prévu `n8n.louna-co.com` pour l'orchestrateur, `agent.louna-co.com` réservé pour le futur tableau de bord (Phase 2).
+- **Conséquences** :
+  - DNS A records à pointer vers l'IP du VPS Hetzner (Jour 3).
+  - Certificats Let's Encrypt à émettre pour `n8n.louna-co.com` (et plus tard `agent.louna-co.com`).
+  - Le site marketing principal `louna-co.com` reste sous WordPress (à confirmer avec Lou — on n'y touche pas dans Sprint 1).

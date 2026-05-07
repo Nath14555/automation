@@ -223,7 +223,7 @@ Le prompt système final (~15 000 mots) doit contenir minimum ces sections (vers
 1. **Jour 1 matin** : Repo Git, structure de dossiers, README, hooks pre-commit, `.env.example`, `.gitignore`.
 2. **Jour 1 après-midi** : VPS Hetzner, `setup.sh` (user, SSH, UFW, fail2ban), Docker.
 3. **Jour 2** : `docker-compose.yml` complet, volumes, test local.
-4. **Jour 3** : DNS, déploiement, Nginx, Let's Encrypt.
+4. **Jour 3** : DNS sur `louna-co.com` (déjà acquis), déploiement, Nginx, Let's Encrypt.
 5. **Jour 4** : Comptes API, clés dans `.env`, health-check.
 6. **Jour 5** : Workflow n8n bout en bout, CI/CD, rapport de fin de sprint.
 
