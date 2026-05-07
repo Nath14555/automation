@@ -1,37 +1,32 @@
 {
-  "name": "louna-agent",
+  "name": "louna-monorepo",
   "version": "0.0.1",
   "private": true,
-  "description": "Agent marketing autonome pour Louna&Co — Pilates Mat & hub bien-être féminin (Montréal).",
+  "description": "Monorepo — agents marketing autonomes (louna-agent et autres).",
   "type": "module",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
   },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "health-check": "tsx scripts/health-check.ts",
-    "seed:knowledge": "tsx scripts/seed-knowledge-base.ts",
+    "health-check": "npm run health-check --workspace @louna/agent",
     "prepare": "husky"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.1",
-    "@qdrant/js-client-rest": "^1.12.0",
-    "openai": "^4.73.0",
-    "pino": "^9.5.0",
-    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.6.0",
     "@commitlint/config-conventional": "^19.6.0",
+    "@eslint/js": "^9.15.0",
     "@types/node": "^20.17.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",

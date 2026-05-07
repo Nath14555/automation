@@ -1,9 +1,9 @@
-node_modules/
-dist/
-build/
-coverage/
+**/node_modules/
+**/dist/
+**/build/
+**/coverage/
 .husky/_/
-n8n-workflows/*.json
+apps/*/n8n-workflows/*.json
 *.min.js
 *.min.css
 package-lock.json

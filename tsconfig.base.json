@@ -4,8 +4,6 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./",
 
     "strict": true,
     "noImplicitAny": true,
@@ -30,23 +28,10 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": false,
 
     "skipLibCheck": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"],
-      "@/agent/*": ["src/agent/*"],
-      "@/tools/*": ["src/tools/*"],
-      "@/knowledge/*": ["src/knowledge/*"],
-      "@/monitoring/*": ["src/monitoring/*"],
-      "@/utils/*": ["src/utils/*"]
-    }
-  },
-  "include": ["src/**/*", "scripts/**/*", "tests/**/*"],
-  "exclude": ["node_modules", "dist", "build", ".husky"]
+    "sourceMap": true
+  }
 }

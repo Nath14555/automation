@@ -52,3 +52,21 @@ Format : ID · Date · Statut · Contexte · Décision · Conséquences.
   - DNS A records à pointer vers l'IP du VPS Hetzner (Jour 3).
   - Certificats Let's Encrypt à émettre pour `n8n.louna-co.com` (et plus tard `agent.louna-co.com`).
   - Le site marketing principal `louna-co.com` reste sous WordPress (à confirmer avec Lou — on n'y touche pas dans Sprint 1).
+
+## ADR-0005 — Passage en monorepo (npm workspaces)
+
+- **Date** : 2026-05-07
+- **Statut** : Accepté
+- **Contexte** : Lou prévoit un deuxième agent (autre automatisation) qui pourrait partager de l'infrastructure (n8n, Postgres, Qdrant) et du code (wrappers Anthropic, helpers n8n, logger, errors) avec `louna-agent`. Garder un seul repo facilite le déploiement, l'observabilité et le partage de code.
+- **Décision** :
+  - Convertir le repo en **monorepo npm workspaces** (built-in, pas de tooling supplémentaire type Turborepo/Nx pour l'instant).
+  - Structure : `apps/*` pour les agents, `packages/*` pour le code partagé.
+  - L'infrastructure Docker (`docker-compose.yml`, `nginx/`, `scripts/setup.sh|deploy.sh|backup.sh`) reste à la racine — un seul VPS héberge la stack pour tous les agents.
+  - `tsconfig.base.json` à la racine, étendu par chaque workspace.
+  - ESLint + Prettier + Husky + commitlint restent à la racine et s'appliquent à tous les workspaces.
+- **Conséquences** :
+  - `apps/louna-agent/` contient le code, les prompts, la knowledge base, les workflows n8n et le BRIEF de l'agent Louna.
+  - `packages/shared/` est un skeleton pour l'instant (export {}). Sera peuplé quand le 2e agent émergera et qu'on identifiera le code à factoriser (probablement : Anthropic wrapper, logger, errors, n8n helpers).
+  - Le 2e agent se créera comme `apps/<nom>/` avec son propre `package.json` et `tsconfig.json` étendant la base.
+  - Tous les agents partagent la même instance n8n (donc même domaine `n8n.louna-co.com`) ; on les distingue via les conventions de nommage des workflows (préfixe par projet : `LOUNA_TRG_*` vs `<AUTRE>_TRG_*`).
+  - Refactor opéré pendant Sprint 1, avant que du code applicatif n'existe — coût de migration minimal.

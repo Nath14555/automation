@@ -5,12 +5,12 @@ import prettierConfig from 'eslint-config-prettier';
 export default tseslint.config(
   {
     ignores: [
-      'dist/**',
-      'build/**',
-      'node_modules/**',
-      'coverage/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/node_modules/**',
+      '**/coverage/**',
       '.husky/**',
-      'n8n-workflows/**/*.json',
+      'apps/*/n8n-workflows/**/*.json',
     ],
   },
   eslint.configs.recommended,
@@ -40,7 +40,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/**/*.ts', 'tests/**/*.ts'],
+    files: ['**/scripts/**/*.ts', '**/tests/**/*.ts'],
     rules: {
       'no-console': 'off',
     },
