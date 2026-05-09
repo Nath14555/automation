@@ -20,7 +20,9 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "health-check": "npm run health-check --workspace @louna/agent",
+    "health-check:marketing": "npm run health-check --workspace @louna/marketing",
+    "health-check:bizdev": "npm run health-check --workspace @louna/bizdev",
+    "health-check": "npm run health-check:marketing && npm run health-check:bizdev",
     "prepare": "husky"
   },
   "devDependencies": {

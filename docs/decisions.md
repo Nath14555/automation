@@ -70,3 +70,31 @@ Format : ID · Date · Statut · Contexte · Décision · Conséquences.
   - Le 2e agent se créera comme `apps/<nom>/` avec son propre `package.json` et `tsconfig.json` étendant la base.
   - Tous les agents partagent la même instance n8n (donc même domaine `n8n.louna-co.com`) ; on les distingue via les conventions de nommage des workflows (préfixe par projet : `LOUNA_TRG_*` vs `<AUTRE>_TRG_*`).
   - Refactor opéré pendant Sprint 1, avant que du code applicatif n'existe — coût de migration minimal.
+
+## ADR-0006 — Split marketing / business development en deux agents
+
+- **Date** : 2026-05-09
+- **Statut** : Accepté
+- **Contexte** : Lou a confirmé que le 2e agent qu'elle voulait ajouter au monorepo est l'**agent développement d'affaires** (prospection partenaires Social Club), distinct de l'agent marketing (contenu, DM clientes, courriels). Le document produit qu'elle a fourni couvre les deux périmètres mais c'est elle qui veut explicitement deux agents séparés.
+- **Décision** :
+  - Renommer `apps/louna-agent/` → `apps/louna-marketing/` (package `@louna/marketing`).
+  - Créer `apps/louna-bizdev/` (package `@louna/bizdev`) avec la même structure squelette.
+  - Frontière fonctionnelle :
+    - **`louna-marketing`** = création/publication de contenu (Instagram, Facebook, Reels), réponses DM clientes, séquences Brevo (bienvenue, abandon, anniversaire, réveil), demandes d'avis, rapports marketing.
+    - **`louna-bizdev`** = identification de cibles partenaires (yacht clubs, vignobles, country clubs, galeries, spas, hôtels-boutiques), engagement public progressif, transition vers DM, prise de rendez-vous Google Calendar, suivi du pipeline de partenariats, rapports bizdev.
+  - **Partagé** :
+    - Voix de marque (mêmes prompts de tonalité, même base brand-voice dans Qdrant).
+    - Infrastructure (un seul VPS, un seul n8n, un seul Postgres, un seul Qdrant, une seule clé Anthropic).
+    - HubSpot CRM unique (segmenté par type d'objet : `client_contact` vs `partner_contact`).
+    - Veille contextuelle (un seul flux RSS, alerte les deux agents).
+    - Code transversal dans `packages/shared/`.
+  - Chaque agent a ses propres workflows n8n préfixés (`MKT_*` vs `BIZ_*`) et ses propres prompts/knowledge-base.
+  - Le rapport hebdo du lundi est consolidé en un seul email (les deux agents y contribuent).
+- **Conséquences** :
+  - Coût d'infra inchangé (même stack pour les deux).
+  - Coût Claude API peut augmenter modérément (plus d'appels) mais reste majoritairement Haiku pour le volume.
+  - Possibilité de désactiver/mettre en pause un des deux agents indépendamment.
+  - Plus de clarté pour Lou sur ce que chaque agent fait, et plus facile pour elle de prioriser quel agent calibrer en premier (probablement marketing avant bizdev).
+  - Refactor opéré encore avant l'existence de code applicatif — toujours minimal.
+
+> 📝 **À ajuster plus tard avec Lou** : la frontière exacte entre marketing et bizdev sur les zones grises (qui gère les DM si un partenaire potentiel répond, qui envoie l'email de relance partenaire, etc.).

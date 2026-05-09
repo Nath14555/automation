@@ -6,8 +6,8 @@ Monorepo regroupant les agents marketing autonomes et l'infrastructure partagée
 
 | Workspace | Description | Statut |
 |-----------|-------------|--------|
-| [`apps/louna-agent`](./apps/louna-agent) | Agent marketing pour **Louna&Co** (Pilates Mat, Montréal) | 🚧 Sprint 1 |
-| `apps/<future>` | Deuxième agent — emplacement réservé | À venir |
+| [`apps/louna-marketing`](./apps/louna-marketing) | Agent **marketing** Louna&Co — contenu, DM clientes, courriels, rapports | 🚧 Sprint 1 |
+| [`apps/louna-bizdev`](./apps/louna-bizdev) | Agent **développement d'affaires** Louna&Co — prospection partenaires Social Club | 🌱 Sprint 1 (skeleton + BRIEF) |
 | [`packages/shared`](./packages/shared) | Code transversal (logger, errors, wrappers) | Skeleton |
 
 ## Infrastructure partagée (au niveau du repo)
@@ -23,8 +23,13 @@ automation/
 ├── packages/
 │   └── shared/                 ← code transversal
 └── apps/
-    └── louna-agent/            ← agent Louna&Co (BRIEF, prompts, knowledge base, src)
+    ├── louna-marketing/        ← agent marketing (contenu, DM, courriels)
+    └── louna-bizdev/           ← agent dev d'affaires (partenariats Social Club)
 ```
+
+Conventions de nommage des workflows n8n : `MKT_*` pour marketing, `BIZ_*` pour bizdev.
+HubSpot CRM unique, segmenté par type d'objet (`client_contact` vs `partner_contact`).
+Voir [`docs/decisions.md` ADR-0006](./docs/decisions.md) pour le détail du split.
 
 ## Stack technique
 

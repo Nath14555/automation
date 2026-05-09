@@ -1,8 +1,8 @@
 {
-  "name": "@louna/agent",
+  "name": "@louna/marketing",
   "version": "0.0.1",
   "private": true,
-  "description": "Agent marketing autonome pour Louna&Co — Pilates Mat & hub bien-être féminin (Montréal).",
+  "description": "Agent marketing autonome pour Louna&Co — contenu, DM, courriels, rapports.",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
